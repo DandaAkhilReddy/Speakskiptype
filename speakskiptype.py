@@ -238,6 +238,44 @@ def start_recording():
     notify("🎤 Recording", "Speak now! Press Ctrl+S to stop.")
 
 
+def copy_to_clipboard(text):
+    """Copy text to clipboard (cross-platform)."""
+    if sys.platform == 'win32':
+        # Windows: use native clipboard
+        import subprocess
+        process = subprocess.Popen(['clip'], stdin=subprocess.PIPE, shell=True)
+        process.communicate(text.encode('utf-8'))
+    elif sys.platform == 'darwin':
+        # macOS
+        import subprocess
+        process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE)
+        process.communicate(text.encode('utf-8'))
+    else:
+        # Linux: try xclip or xsel
+        import subprocess
+        try:
+            process = subprocess.Popen(['xclip', '-selection', 'clipboard'], stdin=subprocess.PIPE)
+            process.communicate(text.encode('utf-8'))
+        except FileNotFoundError:
+            try:
+                process = subprocess.Popen(['xsel', '--clipboard', '--input'], stdin=subprocess.PIPE)
+                process.communicate(text.encode('utf-8'))
+            except FileNotFoundError:
+                # Fallback to pynput typing
+                return False
+    return True
+
+
+def paste_from_clipboard():
+    """Simulate Ctrl+V to paste."""
+    time.sleep(0.1)
+    keyboard_controller.press(Key.ctrl)
+    keyboard_controller.press('v')
+    keyboard_controller.release('v')
+    keyboard_controller.release(Key.ctrl)
+    time.sleep(0.1)
+
+
 def stop_recording_and_type():
     """Stop recording and type the recognized text."""
     global is_recording, recorded_text
@@ -262,14 +300,18 @@ def stop_recording_and_type():
 
     if recorded_text:
         log(f"[TEXT] \"{recorded_text}\"", Colors.GREEN)
-        log(f"[TYPE] Auto-typing to cursor position...", Colors.YELLOW)
-        notify("✅ Typing", f'"{recorded_text}"')
+        log(f"[PASTE] Pasting to cursor position...", Colors.YELLOW)
+        notify("✅ Pasting", f'"{recorded_text}"')
 
         # Small delay to ensure key release
-        time.sleep(0.2)
+        time.sleep(0.3)
 
-        # Type the text at cursor position
-        keyboard_controller.type(recorded_text)
+        # Use clipboard + paste (more reliable on Windows)
+        if copy_to_clipboard(recorded_text):
+            paste_from_clipboard()
+        else:
+            # Fallback to typing
+            keyboard_controller.type(recorded_text)
 
         log(f"[DONE] Text inserted!\n", Colors.GREEN)
     else:
