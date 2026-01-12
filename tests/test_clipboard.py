@@ -136,6 +136,8 @@ class TestStopRecordingWithClipboard:
         """Test that stop_recording uses clipboard method."""
         speakskiptype.is_recording = True
         speakskiptype.recorded_text = "hello world"
+        # Disable space after for test
+        speakskiptype.config['output']['add_space_after'] = False
 
         mock_recognizer = Mock()
         mock_recognizer.FinalResult.return_value = '{"text": ""}'
@@ -147,7 +149,8 @@ class TestStopRecordingWithClipboard:
         with patch.object(speakskiptype, 'copy_to_clipboard', return_value=True) as mock_copy:
             with patch.object(speakskiptype, 'paste_from_clipboard') as mock_paste:
                 with patch('time.sleep'):
-                    speakskiptype.stop_recording_and_type()
+                    with patch.object(speakskiptype, 'add_to_history'):
+                        speakskiptype.stop_recording_and_type()
 
                 mock_copy.assert_called_once_with("hello world")
                 mock_paste.assert_called_once()
@@ -156,6 +159,7 @@ class TestStopRecordingWithClipboard:
         """Test fallback to keyboard typing when clipboard fails."""
         speakskiptype.is_recording = True
         speakskiptype.recorded_text = "fallback test"
+        speakskiptype.config['output']['add_space_after'] = False
 
         mock_recognizer = Mock()
         mock_recognizer.FinalResult.return_value = '{"text": ""}'
@@ -166,7 +170,8 @@ class TestStopRecordingWithClipboard:
 
         with patch.object(speakskiptype, 'copy_to_clipboard', return_value=False):
             with patch('time.sleep'):
-                speakskiptype.stop_recording_and_type()
+                with patch.object(speakskiptype, 'add_to_history'):
+                    speakskiptype.stop_recording_and_type()
 
         # Should fall back to type method
         mock_controller.type.assert_called_once_with("fallback test")
