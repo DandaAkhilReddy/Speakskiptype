@@ -1,0 +1,6 @@
+# Development dependencies
+-r requirements.txt
+
+# Testing
+pytest>=7.0.0
+numpy>=1.20.0

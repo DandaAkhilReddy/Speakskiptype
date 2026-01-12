@@ -18,7 +18,32 @@ import json
 import threading
 import time
 
-# Check and install dependencies
+# ANSI Colors for terminal
+class Colors:
+    RED = '\033[91m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    BLUE = '\033[94m'
+    MAGENTA = '\033[95m'
+    CYAN = '\033[96m'
+    WHITE = '\033[97m'
+    BOLD = '\033[1m'
+    END = '\033[0m'
+
+
+# Global variables
+audio_queue = queue.Queue()
+is_recording = False
+recorded_text = ""
+ctrl_pressed = False
+
+# These will be initialized when running (not importing)
+model = None
+recognizer = None
+keyboard_controller = None
+Key = None
+
+
 def check_dependencies():
     """Check if required packages are installed."""
     required = ['vosk', 'sounddevice', 'pynput']
@@ -37,33 +62,14 @@ def check_dependencies():
         subprocess.check_call([sys.executable, '-m', 'pip', 'install'] + missing + ['-q'])
         print("[+] Packages installed successfully!\n")
 
-# Run dependency check
-check_dependencies()
 
-import sounddevice as sd
-from vosk import Model, KaldiRecognizer
-from pynput import keyboard
-from pynput.keyboard import Controller, Key
+def init_keyboard():
+    """Initialize keyboard controller and Key."""
+    global keyboard_controller, Key
+    from pynput.keyboard import Controller, Key as PynputKey
+    keyboard_controller = Controller()
+    Key = PynputKey
 
-# Global variables
-audio_queue = queue.Queue()
-is_recording = False
-recorded_text = ""
-keyboard_controller = Controller()
-model = None
-recognizer = None
-
-# ANSI Colors for terminal
-class Colors:
-    RED = '\033[91m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    BLUE = '\033[94m'
-    MAGENTA = '\033[95m'
-    CYAN = '\033[96m'
-    WHITE = '\033[97m'
-    BOLD = '\033[1m'
-    END = '\033[0m'
 
 def print_banner():
     """Print the SpeakSkipType banner."""
@@ -81,6 +87,7 @@ def print_banner():
 """
     print(banner)
 
+
 def print_controls():
     """Print the keyboard controls."""
     print(f"""
@@ -91,6 +98,7 @@ def print_controls():
 
 {Colors.YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{Colors.END}
 """)
+
 
 def download_model():
     """Download the Vosk model if not present."""
@@ -139,12 +147,14 @@ def download_model():
 
     return model_path
 
-def audio_callback(indata, frames, time, status):
+
+def audio_callback(indata, frames, time_info, status):
     """Callback for audio stream."""
     if status:
         print(f"{Colors.RED}Audio Error: {status}{Colors.END}", file=sys.stderr)
     if is_recording:
         audio_queue.put(bytes(indata))
+
 
 def process_audio():
     """Process audio from the queue and perform speech recognition."""
@@ -168,6 +178,7 @@ def process_audio():
                 sys.stdout.write(f"\r{Colors.MAGENTA}   Hearing: {partial_text}...{Colors.END}          ")
                 sys.stdout.flush()
 
+
 def start_recording():
     """Start recording audio."""
     global is_recording, recorded_text
@@ -180,6 +191,7 @@ def start_recording():
 
     # Clear partial result display
     print(f"\n{Colors.RED}{Colors.BOLD}[REC]{Colors.END} Recording... Speak now! (Ctrl+S to stop)")
+
 
 def stop_recording_and_type():
     """Stop recording and type the recognized text."""
@@ -217,6 +229,7 @@ def stop_recording_and_type():
     else:
         print(f"{Colors.YELLOW}[!] No speech detected. Try again.{Colors.END}\n")
 
+
 def on_hotkey(key_combination):
     """Handle hotkey press."""
     try:
@@ -225,8 +238,6 @@ def on_hotkey(key_combination):
     except:
         pass
 
-# Hotkey state tracking
-ctrl_pressed = False
 
 def on_press(key):
     """Handle key press events."""
@@ -249,6 +260,7 @@ def on_press(key):
     except AttributeError:
         pass
 
+
 def on_release(key):
     """Handle key release events."""
     global ctrl_pressed
@@ -256,9 +268,21 @@ def on_release(key):
     if key == Key.ctrl_l or key == Key.ctrl_r:
         ctrl_pressed = False
 
+
 def main():
     """Main function."""
     global model, recognizer
+
+    # Check and install dependencies
+    check_dependencies()
+
+    # Import after dependency check
+    import sounddevice as sd
+    from vosk import Model, KaldiRecognizer
+    from pynput import keyboard
+
+    # Initialize keyboard
+    init_keyboard()
 
     print_banner()
 
@@ -292,6 +316,7 @@ def main():
         print(f"{Colors.RED}[!] Error: {e}{Colors.END}")
         print(f"{Colors.YELLOW}[*] Make sure your microphone is connected and accessible.{Colors.END}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
