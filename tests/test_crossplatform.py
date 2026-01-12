@@ -141,7 +141,7 @@ class TestLinuxCompatibility:
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         readme = os.path.join(project_root, 'README.md')
 
-        with open(readme, 'r') as f:
+        with open(readme, 'r', encoding='utf-8') as f:
             content = f.read()
 
         # README should mention Linux audio permissions

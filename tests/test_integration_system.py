@@ -23,33 +23,33 @@ class TestModuleImports:
     def test_vosk_dependency_configured(self):
         """Test that vosk is configured as a dependency."""
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        with open(os.path.join(project_root, 'requirements.txt')) as f:
+        with open(os.path.join(project_root, 'requirements.txt'), encoding='utf-8') as f:
             content = f.read().lower()
         assert 'vosk' in content
         # Also verify the main script references vosk
-        with open(os.path.join(project_root, 'speakskiptype.py')) as f:
+        with open(os.path.join(project_root, 'speakskiptype.py'), encoding='utf-8') as f:
             script = f.read()
         assert 'vosk' in script.lower() or 'Model' in script
 
     def test_sounddevice_dependency_configured(self):
         """Test that sounddevice is configured as a dependency."""
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        with open(os.path.join(project_root, 'requirements.txt')) as f:
+        with open(os.path.join(project_root, 'requirements.txt'), encoding='utf-8') as f:
             content = f.read().lower()
         assert 'sounddevice' in content
         # Also verify the main script references sounddevice
-        with open(os.path.join(project_root, 'speakskiptype.py')) as f:
+        with open(os.path.join(project_root, 'speakskiptype.py'), encoding='utf-8') as f:
             script = f.read()
         assert 'sounddevice' in script or 'RawInputStream' in script
 
     def test_pynput_dependency_configured(self):
         """Test that pynput is configured as a dependency."""
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        with open(os.path.join(project_root, 'requirements.txt')) as f:
+        with open(os.path.join(project_root, 'requirements.txt'), encoding='utf-8') as f:
             content = f.read().lower()
         assert 'pynput' in content
         # Also verify the main script references pynput
-        with open(os.path.join(project_root, 'speakskiptype.py')) as f:
+        with open(os.path.join(project_root, 'speakskiptype.py'), encoding='utf-8') as f:
             script = f.read()
         assert 'pynput' in script or 'keyboard' in script
 
@@ -270,7 +270,7 @@ class TestScriptSyntax:
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         main_script = os.path.join(project_root, 'speakskiptype.py')
 
-        with open(main_script, 'r') as f:
+        with open(main_script, 'r', encoding='utf-8') as f:
             source = f.read()
 
         # This will raise SyntaxError if there are syntax errors
@@ -281,7 +281,7 @@ class TestScriptSyntax:
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         main_script = os.path.join(project_root, 'speakskiptype.py')
 
-        with open(main_script, 'r') as f:
+        with open(main_script, 'r', encoding='utf-8') as f:
             first_line = f.readline()
 
         assert first_line.startswith('#!')
