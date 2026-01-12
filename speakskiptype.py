@@ -7,6 +7,11 @@ Ctrl+R = Start Recording
 Ctrl+S = Stop & Auto-Type
 Ctrl+Q = Quit
 
+Usage:
+  python speakskiptype.py           # Run in terminal
+  python speakskiptype.py --bg      # Run in background (global hotkeys work everywhere)
+  pythonw speakskiptype.py --bg     # Run hidden in background (Windows)
+
 Author: Your Name
 License: MIT
 """
@@ -36,6 +41,7 @@ audio_queue = queue.Queue()
 is_recording = False
 recorded_text = ""
 ctrl_pressed = False
+background_mode = False
 
 # These will be initialized when running (not importing)
 model = None
@@ -100,6 +106,45 @@ def print_controls():
 """)
 
 
+def notify(title, message):
+    """Show a notification (works on Windows, macOS, Linux)."""
+    if not background_mode:
+        return
+
+    try:
+        if sys.platform == 'win32':
+            # Windows toast notification
+            try:
+                from win10toast import ToastNotifier
+                toaster = ToastNotifier()
+                toaster.show_toast(title, message, duration=2, threaded=True)
+            except ImportError:
+                # Fallback: use PowerShell
+                import subprocess
+                subprocess.Popen([
+                    'powershell', '-Command',
+                    f'[System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms"); '
+                    f'$notify = New-Object System.Windows.Forms.NotifyIcon; '
+                    f'$notify.Icon = [System.Drawing.SystemIcons]::Information; '
+                    f'$notify.Visible = $true; '
+                    f'$notify.ShowBalloonTip(2000, "{title}", "{message}", [System.Windows.Forms.ToolTipIcon]::Info)'
+                ], creationflags=subprocess.CREATE_NO_WINDOW)
+        elif sys.platform == 'darwin':
+            # macOS
+            os.system(f'osascript -e \'display notification "{message}" with title "{title}"\'')
+        else:
+            # Linux
+            os.system(f'notify-send "{title}" "{message}" 2>/dev/null')
+    except:
+        pass  # Silently fail if notifications don't work
+
+
+def log(message, color=Colors.WHITE):
+    """Print message if not in background mode."""
+    if not background_mode:
+        print(f"{color}{message}{Colors.END}")
+
+
 def download_model():
     """Download the Vosk model if not present."""
     model_path = os.path.expanduser("~/.speakskiptype/vosk-model-small-en-us-0.15")
@@ -150,7 +195,7 @@ def download_model():
 
 def audio_callback(indata, frames, time_info, status):
     """Callback for audio stream."""
-    if status:
+    if status and not background_mode:
         print(f"{Colors.RED}Audio Error: {status}{Colors.END}", file=sys.stderr)
     if is_recording:
         audio_queue.put(bytes(indata))
@@ -170,11 +215,11 @@ def process_audio():
             text = result.get('text', '')
             if text:
                 recorded_text += text + " "
-                print(f"{Colors.CYAN}   Recognized: {text}{Colors.END}")
+                log(f"   Recognized: {text}", Colors.CYAN)
         else:
             partial = json.loads(recognizer.PartialResult())
             partial_text = partial.get('partial', '')
-            if partial_text:
+            if partial_text and not background_mode:
                 sys.stdout.write(f"\r{Colors.MAGENTA}   Hearing: {partial_text}...{Colors.END}          ")
                 sys.stdout.flush()
 
@@ -189,8 +234,8 @@ def start_recording():
     is_recording = True
     recorded_text = ""
 
-    # Clear partial result display
-    print(f"\n{Colors.RED}{Colors.BOLD}[REC]{Colors.END} Recording... Speak now! (Ctrl+S to stop)")
+    log(f"\n[REC] Recording... Speak now! (Ctrl+S to stop)", Colors.RED + Colors.BOLD)
+    notify("🎤 Recording", "Speak now! Press Ctrl+S to stop.")
 
 
 def stop_recording_and_type():
@@ -213,11 +258,12 @@ def stop_recording_and_type():
 
     recorded_text = recorded_text.strip()
 
-    print(f"\n{Colors.GREEN}[STOP]{Colors.END} Recording stopped.")
+    log(f"\n[STOP] Recording stopped.", Colors.GREEN)
 
     if recorded_text:
-        print(f"{Colors.GREEN}[TEXT]{Colors.END} \"{recorded_text}\"")
-        print(f"{Colors.YELLOW}[TYPE]{Colors.END} Auto-typing to cursor position...")
+        log(f"[TEXT] \"{recorded_text}\"", Colors.GREEN)
+        log(f"[TYPE] Auto-typing to cursor position...", Colors.YELLOW)
+        notify("✅ Typing", f'"{recorded_text}"')
 
         # Small delay to ensure key release
         time.sleep(0.2)
@@ -225,9 +271,10 @@ def stop_recording_and_type():
         # Type the text at cursor position
         keyboard_controller.type(recorded_text)
 
-        print(f"{Colors.GREEN}[DONE]{Colors.END} Text inserted!\n")
+        log(f"[DONE] Text inserted!\n", Colors.GREEN)
     else:
-        print(f"{Colors.YELLOW}[!] No speech detected. Try again.{Colors.END}\n")
+        log(f"[!] No speech detected. Try again.\n", Colors.YELLOW)
+        notify("⚠️ No Speech", "No speech detected. Try again.")
 
 
 def on_hotkey(key_combination):
@@ -250,12 +297,11 @@ def on_press(key):
             if hasattr(key, 'char'):
                 if key.char == 'r' or key.char == '\x12':  # Ctrl+R
                     start_recording()
-                    return False  # Don't propagate
                 elif key.char == 's' or key.char == '\x13':  # Ctrl+S
                     stop_recording_and_type()
-                    return False
                 elif key.char == 'q' or key.char == '\x11':  # Ctrl+Q
-                    print(f"\n{Colors.YELLOW}[*] Exiting SpeakSkipType...{Colors.END}")
+                    log(f"\n[*] Exiting SpeakSkipType...", Colors.YELLOW)
+                    notify("👋 Goodbye", "SpeakSkipType stopped.")
                     os._exit(0)
     except AttributeError:
         pass
@@ -269,12 +315,62 @@ def on_release(key):
         ctrl_pressed = False
 
 
-def main():
-    """Main function."""
-    global model, recognizer
+def run_background():
+    """Run in background mode with system tray (Windows) or daemon (Unix)."""
+    global background_mode
+    background_mode = True
 
-    # Check and install dependencies
-    check_dependencies()
+    # On Windows, try to create a system tray icon
+    if sys.platform == 'win32':
+        try:
+            import pystray
+            from PIL import Image, ImageDraw
+
+            # Create a simple icon
+            def create_icon():
+                image = Image.new('RGB', (64, 64), color=(0, 128, 255))
+                draw = ImageDraw.Draw(image)
+                draw.ellipse([8, 8, 56, 56], fill=(255, 255, 255))
+                draw.ellipse([20, 20, 44, 44], fill=(0, 128, 255))
+                return image
+
+            def on_quit(icon, item):
+                icon.stop()
+                os._exit(0)
+
+            def on_status(icon, item):
+                status = "Recording..." if is_recording else "Ready"
+                notify("SpeakSkipType Status", f"Status: {status}\n\nCtrl+R: Record\nCtrl+S: Stop & Type\nCtrl+Q: Quit")
+
+            menu = pystray.Menu(
+                pystray.MenuItem("Status", on_status),
+                pystray.MenuItem("Quit", on_quit)
+            )
+
+            icon = pystray.Icon("SpeakSkipType", create_icon(), "SpeakSkipType - Ctrl+R to record", menu)
+
+            # Run main loop in background
+            def run_main():
+                main_loop()
+
+            threading.Thread(target=run_main, daemon=True).start()
+
+            notify("🎤 SpeakSkipType", "Running in background!\nCtrl+R: Record | Ctrl+S: Type | Ctrl+Q: Quit")
+            icon.run()
+            return
+
+        except ImportError:
+            # pystray not installed, run without system tray
+            pass
+
+    # Fallback: run without system tray
+    notify("🎤 SpeakSkipType", "Running in background!\nCtrl+R: Record | Ctrl+S: Type | Ctrl+Q: Quit")
+    main_loop()
+
+
+def main_loop():
+    """Main application loop."""
+    global model, recognizer
 
     # Import after dependency check
     import sounddevice as sd
@@ -284,18 +380,19 @@ def main():
     # Initialize keyboard
     init_keyboard()
 
-    print_banner()
-
     # Download model if needed
     model_path = download_model()
 
-    print(f"{Colors.CYAN}[*] Loading speech recognition model...{Colors.END}")
+    if not background_mode:
+        print(f"{Colors.CYAN}[*] Loading speech recognition model...{Colors.END}")
+
     model = Model(model_path)
     recognizer = KaldiRecognizer(model, 16000)
-    print(f"{Colors.GREEN}[+] Model loaded successfully!{Colors.END}")
 
-    print_controls()
-    print(f"{Colors.GREEN}[*] SpeakSkipType is ready! Waiting for commands...{Colors.END}\n")
+    if not background_mode:
+        print(f"{Colors.GREEN}[+] Model loaded successfully!{Colors.END}")
+        print_controls()
+        print(f"{Colors.GREEN}[*] SpeakSkipType is ready! Waiting for commands...{Colors.END}\n")
 
     # Start audio processing thread
     process_thread = threading.Thread(target=process_audio, daemon=True)
@@ -306,16 +403,32 @@ def main():
         with sd.RawInputStream(samplerate=16000, blocksize=8000, dtype='int16',
                                channels=1, callback=audio_callback):
 
-            # Start keyboard listener
-            with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+            # Start keyboard listener (suppress=False to not block other apps)
+            with keyboard.Listener(on_press=on_press, on_release=on_release, suppress=False) as listener:
                 listener.join()
 
     except KeyboardInterrupt:
-        print(f"\n{Colors.YELLOW}[*] Exiting SpeakSkipType...{Colors.END}")
+        log(f"\n[*] Exiting SpeakSkipType...", Colors.YELLOW)
     except Exception as e:
-        print(f"{Colors.RED}[!] Error: {e}{Colors.END}")
-        print(f"{Colors.YELLOW}[*] Make sure your microphone is connected and accessible.{Colors.END}")
+        if not background_mode:
+            print(f"{Colors.RED}[!] Error: {e}{Colors.END}")
+            print(f"{Colors.YELLOW}[*] Make sure your microphone is connected and accessible.{Colors.END}")
         sys.exit(1)
+
+
+def main():
+    """Main function."""
+    global background_mode
+
+    # Check and install dependencies
+    check_dependencies()
+
+    # Check for background mode
+    if '--bg' in sys.argv or '--background' in sys.argv:
+        run_background()
+    else:
+        print_banner()
+        main_loop()
 
 
 if __name__ == "__main__":

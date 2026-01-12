@@ -81,7 +81,7 @@ class TestHotkeyHandling:
         result = speakskiptype.on_press(mock_key)
 
         assert speakskiptype.is_recording is True
-        assert result is False  # Don't propagate
+        # No longer suppressing events so they propagate to other apps
 
     def test_ctrl_r_raw_code_starts_recording(self):
         """Test that Ctrl+R with raw code starts recording."""
@@ -115,7 +115,7 @@ class TestHotkeyHandling:
             result = speakskiptype.on_press(mock_key)
 
         assert speakskiptype.is_recording is False
-        assert result is False
+        # No longer suppressing events so they propagate to other apps
 
     def test_ctrl_s_raw_code_stops_recording(self):
         """Test that Ctrl+S with raw code stops recording."""
