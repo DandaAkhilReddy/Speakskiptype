@@ -200,6 +200,7 @@ is_recording = False
 recorded_text = ""
 ctrl_pressed = False
 shift_pressed = False
+alt_pressed = False
 hold_to_record_active = False
 background_mode = False
 debug_mode = False
@@ -754,12 +755,11 @@ def print_controls():
 
     print(f"""
 {Colors.BOLD}CONTROLS:{Colors.END}
-  {Colors.GREEN}Ctrl + R{Colors.END}         = Start Recording {Colors.RED}(press again to stop){Colors.END}
-  {Colors.GREEN}Ctrl + S{Colors.END}         = Stop & Auto-Paste {Colors.CYAN}(text at cursor){Colors.END}
-  {Colors.GREEN}Ctrl + Shift + R{Colors.END} = Hold-to-Record {Colors.MAGENTA}(release to paste){Colors.END}
+  {Colors.GREEN}Alt + R{Colors.END}          = Start Recording {Colors.RED}(no terminal conflict!){Colors.END}
+  {Colors.GREEN}Alt + S{Colors.END}          = Stop & Auto-Paste {Colors.CYAN}(text at cursor){Colors.END}
+  {Colors.GREEN}Alt + Q{Colors.END}          = Quit Application
   {Colors.GREEN}Ctrl + D{Colors.END}         = Toggle Debug Mode
   {Colors.GREEN}Ctrl + H{Colors.END}         = Show History
-  {Colors.GREEN}Ctrl + Q{Colors.END}         = Quit Application
 
 {Colors.BOLD}VOICE COMMANDS:{Colors.END}
   {Colors.CYAN}"new line"{Colors.END}       → inserts line break
@@ -1042,7 +1042,7 @@ def toggle_debug():
 
 def on_press(key):
     """Handle key press events."""
-    global ctrl_pressed, shift_pressed, hold_to_record_active
+    global ctrl_pressed, shift_pressed, alt_pressed, hold_to_record_active
 
     try:
         # Track modifier keys
@@ -1052,53 +1052,58 @@ def on_press(key):
         elif key == Key.shift_l or key == Key.shift_r:
             shift_pressed = True
             return
+        elif key == Key.alt_l or key == Key.alt_r or key == Key.alt_gr:
+            alt_pressed = True
+            return
 
-        if ctrl_pressed:
-            # Get the key character - handle both char attribute and vk (virtual key) codes
-            char = None
-            vk = None
+        # Get the key character - handle both char attribute and vk (virtual key) codes
+        char = None
+        vk = None
 
-            if hasattr(key, 'char') and key.char:
-                char = key.char.lower() if key.char else None
-            if hasattr(key, 'vk'):
-                vk = key.vk
+        if hasattr(key, 'char') and key.char:
+            char = key.char.lower() if key.char else None
+        if hasattr(key, 'vk'):
+            vk = key.vk
 
-            # Virtual key codes for Windows: R=82, S=83, D=68, H=72, Q=81
-            is_r = char == 'r' or char == '\x12' or vk == 82
-            is_s = char == 's' or char == '\x13' or vk == 83
-            is_d = char == 'd' or char == '\x04' or vk == 68
-            is_h = char == 'h' or char == '\x08' or vk == 72
-            is_q = char == 'q' or char == '\x11' or vk == 81
+        # Virtual key codes for Windows: R=82, S=83, D=68, H=72, Q=81
+        is_r = char == 'r' or vk == 82
+        is_s = char == 's' or vk == 83
+        is_d = char == 'd' or vk == 68
+        is_h = char == 'h' or vk == 72
+        is_q = char == 'q' or vk == 81
 
-            # Ctrl+Shift+R: Hold-to-record
-            if shift_pressed and is_r:
-                if not hold_to_record_active:
-                    hold_to_record_active = True
-                    start_recording()
+        # Alt+R: Start recording (primary - no terminal conflict)
+        if alt_pressed and is_r:
+            start_recording()
 
-            # Ctrl+R: Toggle recording
-            elif is_r:
-                start_recording()
+        # Alt+S: Stop and type (primary - no terminal conflict)
+        elif alt_pressed and is_s:
+            stop_recording_and_type()
 
-            # Ctrl+S: Stop and type
-            elif is_s:
-                stop_recording_and_type()
+        # Alt+Q: Quit
+        elif alt_pressed and is_q:
+            log(f"\n{Colors.YELLOW}[*] Exiting SpeakSkipType...{Colors.END}", Colors.YELLOW)
+            notify("Goodbye", "SpeakSkipType stopped.")
+            os._exit(0)
 
-            # Ctrl+D: Toggle debug
-            elif is_d:
-                toggle_debug()
+        # Ctrl+D: Toggle debug
+        elif ctrl_pressed and is_d:
+            toggle_debug()
 
-            # Ctrl+H: Show history
-            elif is_h:
-                if not background_mode:
-                    show_history()
+        # Ctrl+H: Show history
+        elif ctrl_pressed and is_h:
+            if not background_mode:
+                show_history()
 
-            # Ctrl+Q: Quit
-            elif is_q:
-                log(f"\n{Colors.YELLOW}[*] Exiting SpeakSkipType...{Colors.END}", Colors.YELLOW)
-                notify("Goodbye", "SpeakSkipType stopped.")
-                os._exit(0)
+        # Ctrl+Q: Quit (backup)
+        elif ctrl_pressed and is_q:
+            log(f"\n{Colors.YELLOW}[*] Exiting SpeakSkipType...{Colors.END}", Colors.YELLOW)
+            notify("Goodbye", "SpeakSkipType stopped.")
+            os._exit(0)
+
     except AttributeError:
+        pass
+    except Exception:
         pass
     except Exception:
         pass
@@ -1106,7 +1111,7 @@ def on_press(key):
 
 def on_release(key):
     """Handle key release events."""
-    global ctrl_pressed, shift_pressed, hold_to_record_active
+    global ctrl_pressed, shift_pressed, alt_pressed, hold_to_record_active
 
     if key == Key.ctrl_l or key == Key.ctrl_r:
         ctrl_pressed = False
@@ -1118,6 +1123,9 @@ def on_release(key):
 
     elif key == Key.shift_l or key == Key.shift_r:
         shift_pressed = False
+
+    elif key == Key.alt_l or key == Key.alt_r or key == Key.alt_gr:
+        alt_pressed = False
 
 
 def handle_signal(signum, frame):
