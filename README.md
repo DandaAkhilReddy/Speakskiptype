@@ -410,6 +410,129 @@ claude
 
 ---
 
+## 🧠 Anthropic API with Extended Thinking
+
+**NEW!** Direct integration with Claude's API including proper support for Extended Thinking.
+
+### The Problem
+
+When using Claude's **extended thinking** feature via the Anthropic API, you might encounter this error:
+
+```
+Error: thinking blocks must be preserved exactly as received
+```
+
+This happens when:
+- Thinking blocks are modified or removed from conversation history
+- The order of content blocks is changed
+- Follow-up messages don't include the original thinking blocks
+
+### The Solution
+
+We provide `anthropic_client.py` - a client that **automatically handles extended thinking** correctly.
+
+### Installation
+
+```bash
+pip install anthropic
+```
+
+### Quick Start
+
+```python
+from anthropic_client import ClaudeClient
+
+# Create client (uses ANTHROPIC_API_KEY env var)
+client = ClaudeClient()
+
+# First message - thinking blocks are generated internally
+response = client.send_message("Explain quantum entanglement")
+print(response)
+
+# Follow-up - thinking blocks are automatically preserved!
+response = client.send_message("Can you give a simpler analogy?")
+print(response)
+
+# Start fresh conversation (clears all history including thinking)
+client.clear_conversation()
+```
+
+### Configuration Options
+
+```python
+from anthropic_client import ClaudeClient
+
+client = ClaudeClient(
+    api_key="your-api-key",           # Or set ANTHROPIC_API_KEY env var
+    model="claude-sonnet-4-20250514",    # Model to use
+    max_tokens=16000,                  # Max response tokens
+    thinking_enabled=True,             # Enable extended thinking
+    thinking_budget=10000              # Token budget for thinking
+)
+
+# Disable thinking for simpler queries
+client.disable_thinking()
+
+# Re-enable with custom budget
+client.enable_thinking(budget_tokens=5000)
+```
+
+### How It Works
+
+The key fix is preserving `response.content` exactly as returned:
+
+```python
+# CORRECT - Store complete response including thinking blocks
+self._messages.append({
+    "role": "assistant",
+    "content": response.content  # Includes ALL blocks unchanged
+})
+
+# WRONG - Don't filter or modify!
+# content = [b for b in response.content if b.type == "text"]  # BAD!
+```
+
+### Extended Thinking Rules
+
+| Rule | Description |
+|:-----|:------------|
+| Never modify | Keep thinking/redacted_thinking blocks exactly as received |
+| Never remove | Include all blocks in conversation history |
+| Keep order | Don't reorder content blocks |
+| First position | Thinking block must be first in assistant's content array |
+
+### API Reference
+
+| Method | Description |
+|:-------|:------------|
+| `send_message(text)` | Send message, returns text response |
+| `clear_conversation()` | Start fresh conversation |
+| `get_conversation_history()` | Get full history with thinking blocks |
+| `disable_thinking()` | Turn off extended thinking |
+| `enable_thinking(budget)` | Turn on with token budget |
+
+### Example: Multi-turn Conversation
+
+```python
+from anthropic_client import ClaudeClient
+
+client = ClaudeClient(thinking_budget=8000)
+
+# Turn 1 - Claude thinks through the problem
+r1 = client.send_message("What's 15 * 23?")
+print(f"Answer: {r1}")
+
+# Turn 2 - Previous thinking is preserved automatically
+r2 = client.send_message("Now multiply that by 2")
+print(f"Answer: {r2}")
+
+# Turn 3 - Full context maintained
+r3 = client.send_message("What was my first question?")
+print(f"Answer: {r3}")
+```
+
+---
+
 ## 🗣️ Voice Commands
 
 Speak these commands while recording:
