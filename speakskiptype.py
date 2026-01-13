@@ -3,12 +3,16 @@
 SpeakSkipType - The ULTIMATE Speech-to-Text Tool for Developers
 No API. No cloud. 100% FREE. Works locally on any laptop.
 
-SUPERIOR TO ALL COMPETITORS:
+SUPERIOR TO ALL COMPETITORS (Handy, OpenWhispr, voice_typing):
 - Multi-engine support (Vosk fast/lightweight OR Whisper accurate)
 - Voice Activity Detection (VAD) - auto-start/stop on speech
+- Continuous listening mode - don't stop on pauses (like Speechnotes)
 - Real-time transcription display
 - Auto-punctuation mode
+- Filler word removal (um, uh, like, you know)
 - Code dictation mode (recognizes programming terms)
+- Custom vocabulary/dictionary
+- Literal punctuation mode toggle
 - Transcription statistics (WPM, total words)
 - Export history (JSON, TXT, CSV)
 - Hold-to-record mode
@@ -35,6 +39,7 @@ Usage:
   python speakskiptype.py --stats      # Show statistics
   python speakskiptype.py --export     # Export history
   python speakskiptype.py --whisper    # Use Whisper engine (more accurate)
+  python speakskiptype.py --continuous # Continuous listening (no auto-stop)
   pythonw speakskiptype.py --bg        # Run hidden (Windows)
 
 Author: Akhil Reddy
@@ -86,7 +91,8 @@ DEFAULT_CONFIG = {
         "beep_on_stop": True,
         "vad_enabled": False,
         "vad_threshold": 0.5,
-        "vad_silence_duration": 1.5
+        "vad_silence_duration": 1.5,
+        "continuous_mode": False  # Don't auto-stop on silence (like Speechnotes)
     },
     "transcription": {
         "engine": "vosk",  # "vosk" or "whisper"
@@ -95,7 +101,9 @@ DEFAULT_CONFIG = {
         "save_history": True,
         "max_history": 100,
         "auto_punctuation": True,
-        "code_mode": False
+        "code_mode": False,
+        "remove_filler_words": True,  # Remove um, uh, like, you know
+        "literal_punctuation": False  # If True: "period" stays as "period", not "."
     },
     "voice_commands": {
         "enabled": True,
@@ -126,8 +134,19 @@ DEFAULT_CONFIG = {
     },
     "stats": {
         "track_stats": True
+    },
+    "custom_vocabulary": {
+        # User-defined word replacements
+        # Example: "kubernetes": "K8s", "javascript": "JavaScript"
     }
 }
+
+# Filler words to remove
+FILLER_WORDS = [
+    "um", "uh", "er", "ah", "like", "you know", "i mean",
+    "sort of", "kind of", "basically", "actually", "literally",
+    "so yeah", "right", "okay so", "well"
+]
 
 # Code mode replacements for programming
 CODE_REPLACEMENTS = {
@@ -608,6 +627,37 @@ def apply_auto_punctuation(text):
     return result
 
 
+def remove_filler_words(text):
+    """Remove filler words like um, uh, like, you know."""
+    if not config.get('transcription', {}).get('remove_filler_words', True):
+        return text
+
+    result = text
+
+    for filler in FILLER_WORDS:
+        # Remove filler word with surrounding spaces
+        pattern = r'\b' + re.escape(filler) + r'\b\s*'
+        result = re.sub(pattern, ' ', result, flags=re.IGNORECASE)
+
+    # Clean up multiple spaces
+    result = re.sub(r'\s+', ' ', result)
+    return result.strip()
+
+
+def apply_custom_vocabulary(text):
+    """Apply custom vocabulary replacements."""
+    custom_vocab = config.get('custom_vocabulary', {})
+    if not custom_vocab:
+        return text
+
+    result = text
+    for word, replacement in custom_vocab.items():
+        pattern = r'\b' + re.escape(word) + r'\b'
+        result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+
+    return result
+
+
 def process_text(text):
     """Process transcribed text through all filters."""
     if not text:
@@ -615,11 +665,18 @@ def process_text(text):
 
     result = text.strip()
 
-    # Apply code mode first
+    # Remove filler words first
+    result = remove_filler_words(result)
+
+    # Apply custom vocabulary
+    result = apply_custom_vocabulary(result)
+
+    # Apply code mode
     result = apply_code_mode(result)
 
-    # Process voice commands
-    result = process_voice_commands(result)
+    # Process voice commands (only if literal_punctuation is False)
+    if not config.get('transcription', {}).get('literal_punctuation', False):
+        result = process_voice_commands(result)
 
     # Apply auto-punctuation last
     result = apply_auto_punctuation(result)
@@ -682,6 +739,8 @@ def print_controls():
     vad_status = f"{Colors.GREEN}ON{Colors.END}" if config.get('audio', {}).get('vad_enabled', False) else f"{Colors.RED}OFF{Colors.END}"
     code_status = f"{Colors.GREEN}ON{Colors.END}" if config.get('transcription', {}).get('code_mode', False) else f"{Colors.RED}OFF{Colors.END}"
     punct_status = f"{Colors.GREEN}ON{Colors.END}" if config.get('transcription', {}).get('auto_punctuation', True) else f"{Colors.RED}OFF{Colors.END}"
+    filler_status = f"{Colors.GREEN}ON{Colors.END}" if config.get('transcription', {}).get('remove_filler_words', True) else f"{Colors.RED}OFF{Colors.END}"
+    continuous_status = f"{Colors.GREEN}ON{Colors.END}" if config.get('audio', {}).get('continuous_mode', False) else f"{Colors.RED}OFF{Colors.END}"
 
     print(f"""
 {Colors.BOLD}CONTROLS:{Colors.END}
@@ -700,8 +759,10 @@ def print_controls():
 
 {Colors.BOLD}FEATURES:{Colors.END}
   Voice Activity Detection: {vad_status}
+  Continuous Listening:     {continuous_status}
   Code Dictation Mode:      {code_status}
   Auto-Punctuation:         {punct_status}
+  Filler Word Removal:      {filler_status}
 
 {Colors.YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{Colors.END}
 """)
@@ -1215,6 +1276,15 @@ def main():
 
     if '--vad' in sys.argv:
         config['audio']['vad_enabled'] = True
+
+    if '--continuous' in sys.argv:
+        config['audio']['continuous_mode'] = True
+
+    if '--no-filler' in sys.argv or '--remove-filler' in sys.argv:
+        config['transcription']['remove_filler_words'] = True
+
+    if '--literal' in sys.argv:
+        config['transcription']['literal_punctuation'] = True
 
     if '--bg' in sys.argv or '--background' in sys.argv:
         run_background()
