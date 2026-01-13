@@ -7,6 +7,7 @@ import sys
 import os
 import queue
 import json
+import copy
 from unittest.mock import Mock, MagicMock, patch
 
 # Add parent directory to path for imports
@@ -81,6 +82,11 @@ def reset_globals():
     speakskiptype.hold_to_record_active = False
     speakskiptype.background_mode = False
     speakskiptype.Key = MockKey
+    # Reset config to defaults using deep copy and disable auto-punctuation for tests
+    speakskiptype.config = copy.deepcopy(speakskiptype.DEFAULT_CONFIG)
+    speakskiptype.config['transcription']['auto_punctuation'] = False
+    speakskiptype.config['transcription']['code_mode'] = False
+    speakskiptype.config['output']['add_space_after'] = False
     # Clear the audio queue
     while not speakskiptype.audio_queue.empty():
         try:

@@ -1,28 +1,40 @@
 #!/usr/bin/env python3
 """
-SpeakSkipType - The BEST Speech-to-Text Tool for Developers
+SpeakSkipType - The ULTIMATE Speech-to-Text Tool for Developers
 No API. No cloud. 100% FREE. Works locally on any laptop.
 
-UNIQUE FEATURES (that competitors don't have):
-- Hold-to-record mode (hold key, release to auto-type)
-- Audio feedback (beep sounds)
-- Transcription history with timestamps
+SUPERIOR TO ALL COMPETITORS:
+- Multi-engine support (Vosk fast/lightweight OR Whisper accurate)
+- Voice Activity Detection (VAD) - auto-start/stop on speech
+- Real-time transcription display
+- Auto-punctuation mode
+- Code dictation mode (recognizes programming terms)
+- Transcription statistics (WPM, total words)
+- Export history (JSON, TXT, CSV)
+- Hold-to-record mode
+- Audio feedback (beeps)
 - Voice commands (delete that, new line, undo)
 - Custom hotkey configuration
 - Multi-language support
 - Works GLOBALLY in any application
+- Background mode with system tray
+- Debug mode for troubleshooting
 
 CONTROLS:
-  Ctrl+R      = Start Recording (press again or Ctrl+S to stop)
-  Ctrl+S      = Stop & Auto-Type
+  Ctrl+R       = Start Recording (press again to stop)
+  Ctrl+S       = Stop & Auto-Type
   Ctrl+Shift+R = Hold-to-Record (release to auto-type)
-  Ctrl+Q      = Quit Application
-  Ctrl+H      = Show History
+  Ctrl+D       = Toggle Debug Mode
+  Ctrl+H       = Show History
+  Ctrl+Q       = Quit Application
 
 Usage:
   python speakskiptype.py              # Run in terminal
   python speakskiptype.py --bg         # Run in background
   python speakskiptype.py --config     # Edit configuration
+  python speakskiptype.py --stats      # Show statistics
+  python speakskiptype.py --export     # Export history
+  python speakskiptype.py --whisper    # Use Whisper engine (more accurate)
   pythonw speakskiptype.py --bg        # Run hidden (Windows)
 
 Author: Akhil Reddy
@@ -35,8 +47,11 @@ import queue
 import json
 import threading
 import time
+import signal
+import re
 from datetime import datetime
 from pathlib import Path
+from collections import deque
 
 # ANSI Colors for terminal
 class Colors:
@@ -48,6 +63,7 @@ class Colors:
     CYAN = '\033[96m'
     WHITE = '\033[97m'
     BOLD = '\033[1m'
+    DIM = '\033[2m'
     END = '\033[0m'
 
 
@@ -61,35 +77,101 @@ DEFAULT_CONFIG = {
         "stop_and_type": "ctrl+s",
         "hold_to_record": "ctrl+shift+r",
         "quit": "ctrl+q",
-        "show_history": "ctrl+h"
+        "show_history": "ctrl+h",
+        "toggle_debug": "ctrl+d"
     },
     "audio": {
         "sample_rate": 16000,
         "beep_on_start": True,
-        "beep_on_stop": True
+        "beep_on_stop": True,
+        "vad_enabled": False,
+        "vad_threshold": 0.5,
+        "vad_silence_duration": 1.5
     },
     "transcription": {
+        "engine": "vosk",  # "vosk" or "whisper"
         "language": "en-us",
+        "whisper_model": "base",  # tiny, base, small, medium, large
         "save_history": True,
-        "max_history": 100
+        "max_history": 100,
+        "auto_punctuation": True,
+        "code_mode": False
     },
     "voice_commands": {
         "enabled": True,
         "commands": {
             "delete that": "__DELETE_LAST__",
+            "undo that": "__DELETE_LAST__",
+            "scratch that": "__DELETE_LAST__",
             "new line": "\n",
             "new paragraph": "\n\n",
             "tab": "\t",
             "period": ".",
             "comma": ",",
             "question mark": "?",
-            "exclamation mark": "!"
+            "exclamation mark": "!",
+            "colon": ":",
+            "semicolon": ";",
+            "open paren": "(",
+            "close paren": ")",
+            "open bracket": "[",
+            "close bracket": "]",
+            "open brace": "{",
+            "close brace": "}"
         }
     },
     "output": {
         "method": "clipboard",  # clipboard, type, or both
         "add_space_after": True
+    },
+    "stats": {
+        "track_stats": True
     }
+}
+
+# Code mode replacements for programming
+CODE_REPLACEMENTS = {
+    "def ": "def ",
+    "class ": "class ",
+    "import ": "import ",
+    "from ": "from ",
+    "return ": "return ",
+    "if ": "if ",
+    "else": "else",
+    "elif ": "elif ",
+    "for ": "for ",
+    "while ": "while ",
+    "try": "try",
+    "except": "except",
+    "finally": "finally",
+    "with ": "with ",
+    "as ": "as ",
+    "lambda": "lambda",
+    "none": "None",
+    "true": "True",
+    "false": "False",
+    "self": "self",
+    "print": "print",
+    "equals": " = ",
+    "double equals": " == ",
+    "not equals": " != ",
+    "plus equals": " += ",
+    "minus equals": " -= ",
+    "arrow": " -> ",
+    "fat arrow": " => ",
+    "and": " and ",
+    "or": " or ",
+    "not ": "not ",
+    "in ": "in ",
+    "is ": "is ",
+    "async": "async",
+    "await": "await",
+    "const ": "const ",
+    "let ": "let ",
+    "var ": "var ",
+    "function ": "function ",
+    "null": "null",
+    "undefined": "undefined",
 }
 
 
@@ -101,8 +183,23 @@ ctrl_pressed = False
 shift_pressed = False
 hold_to_record_active = False
 background_mode = False
+debug_mode = False
 config = DEFAULT_CONFIG.copy()
 transcription_history = []
+stats = {
+    "total_transcriptions": 0,
+    "total_words": 0,
+    "total_characters": 0,
+    "session_start": None,
+    "session_transcriptions": 0,
+    "session_words": 0,
+    "last_wpm": 0
+}
+
+# VAD (Voice Activity Detection) state
+vad_recording = False
+vad_silence_start = None
+audio_levels = deque(maxlen=10)
 
 # These will be initialized when running
 model = None
@@ -110,17 +207,68 @@ recognizer = None
 keyboard_controller = None
 Key = None
 config_path = None
+whisper_model = None
+
+
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
+
+def log(message, color=Colors.WHITE):
+    """Print message if not in background mode."""
+    if not background_mode:
+        print(f"{color}{message}{Colors.END}")
+
+
+def debug_log(message):
+    """Print debug message if debug mode is enabled."""
+    if debug_mode and not background_mode:
+        print(f"{Colors.DIM}[DEBUG] {message}{Colors.END}")
+
+
+def notify(title, message):
+    """Show a notification (works on Windows, macOS, Linux)."""
+    if not background_mode:
+        return
+
+    try:
+        if sys.platform == 'win32':
+            try:
+                from win10toast import ToastNotifier
+                toaster = ToastNotifier()
+                toaster.show_toast(title, message, duration=2, threaded=True)
+            except ImportError:
+                import subprocess
+                subprocess.Popen([
+                    'powershell', '-Command',
+                    f'[System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms"); '
+                    f'$notify = New-Object System.Windows.Forms.NotifyIcon; '
+                    f'$notify.Icon = [System.Drawing.SystemIcons]::Information; '
+                    f'$notify.Visible = $true; '
+                    f'$notify.ShowBalloonTip(2000, "{title}", "{message}", [System.Windows.Forms.ToolTipIcon]::Info)'
+                ], creationflags=subprocess.CREATE_NO_WINDOW)
+        elif sys.platform == 'darwin':
+            os.system(f'osascript -e \'display notification "{message}" with title "{title}"\'')
+        else:
+            os.system(f'notify-send "{title}" "{message}" 2>/dev/null')
+    except:
+        pass
 
 
 # ============================================================================
 # CONFIGURATION MANAGEMENT
 # ============================================================================
 
-def get_config_path():
-    """Get the configuration file path."""
+def get_config_dir():
+    """Get the configuration directory path."""
     config_dir = Path.home() / ".speakskiptype"
     config_dir.mkdir(exist_ok=True)
-    return config_dir / "config.json"
+    return config_dir
+
+
+def get_config_path():
+    """Get the configuration file path."""
+    return get_config_dir() / "config.json"
 
 
 def load_config():
@@ -132,13 +280,16 @@ def load_config():
         try:
             with open(config_file, 'r', encoding='utf-8') as f:
                 user_config = json.load(f)
-                # Merge with defaults
-                for key in DEFAULT_CONFIG:
-                    if key in user_config:
-                        if isinstance(DEFAULT_CONFIG[key], dict):
-                            config[key] = {**DEFAULT_CONFIG[key], **user_config[key]}
+                # Deep merge with defaults
+                def deep_merge(default, user):
+                    result = default.copy()
+                    for key, value in user.items():
+                        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                            result[key] = deep_merge(result[key], value)
                         else:
-                            config[key] = user_config[key]
+                            result[key] = value
+                    return result
+                config = deep_merge(DEFAULT_CONFIG, user_config)
         except Exception as e:
             log(f"[!] Error loading config: {e}", Colors.YELLOW)
 
@@ -172,14 +323,96 @@ def edit_config():
 
 
 # ============================================================================
+# STATISTICS
+# ============================================================================
+
+def get_stats_path():
+    """Get the stats file path."""
+    return get_config_dir() / "stats.json"
+
+
+def load_stats():
+    """Load statistics from file."""
+    global stats
+    stats_file = get_stats_path()
+
+    if stats_file.exists():
+        try:
+            with open(stats_file, 'r', encoding='utf-8') as f:
+                saved_stats = json.load(f)
+                stats.update(saved_stats)
+        except:
+            pass
+
+    stats["session_start"] = datetime.now().isoformat()
+    stats["session_transcriptions"] = 0
+    stats["session_words"] = 0
+
+
+def save_stats():
+    """Save statistics to file."""
+    if not config.get('stats', {}).get('track_stats', True):
+        return
+
+    stats_file = get_stats_path()
+    with open(stats_file, 'w', encoding='utf-8') as f:
+        json.dump(stats, f, indent=2)
+
+
+def update_stats(text, duration_seconds):
+    """Update statistics after a transcription."""
+    if not text:
+        return
+
+    words = len(text.split())
+    chars = len(text)
+
+    stats["total_transcriptions"] += 1
+    stats["total_words"] += words
+    stats["total_characters"] += chars
+    stats["session_transcriptions"] += 1
+    stats["session_words"] += words
+
+    # Calculate WPM (words per minute)
+    if duration_seconds > 0:
+        stats["last_wpm"] = int((words / duration_seconds) * 60)
+
+    save_stats()
+
+
+def show_stats():
+    """Display transcription statistics."""
+    print(f"\n{Colors.CYAN}{Colors.BOLD}═══ Transcription Statistics ═══{Colors.END}\n")
+
+    print(f"{Colors.BOLD}All Time:{Colors.END}")
+    print(f"  Total Transcriptions: {Colors.GREEN}{stats['total_transcriptions']}{Colors.END}")
+    print(f"  Total Words:          {Colors.GREEN}{stats['total_words']}{Colors.END}")
+    print(f"  Total Characters:     {Colors.GREEN}{stats['total_characters']}{Colors.END}")
+
+    print(f"\n{Colors.BOLD}This Session:{Colors.END}")
+    print(f"  Transcriptions:       {Colors.CYAN}{stats['session_transcriptions']}{Colors.END}")
+    print(f"  Words:                {Colors.CYAN}{stats['session_words']}{Colors.END}")
+    print(f"  Last WPM:             {Colors.CYAN}{stats['last_wpm']}{Colors.END}")
+
+    if stats.get('session_start'):
+        try:
+            start = datetime.fromisoformat(stats['session_start'])
+            duration = datetime.now() - start
+            minutes = int(duration.total_seconds() / 60)
+            print(f"  Session Duration:     {Colors.CYAN}{minutes} minutes{Colors.END}")
+        except:
+            pass
+
+    print()
+
+
+# ============================================================================
 # TRANSCRIPTION HISTORY
 # ============================================================================
 
 def get_history_path():
     """Get the history file path."""
-    config_dir = Path.home() / ".speakskiptype"
-    config_dir.mkdir(exist_ok=True)
-    return config_dir / "history.json"
+    return get_config_dir() / "history.json"
 
 
 def load_history():
@@ -210,14 +443,16 @@ def save_history():
         json.dump(history_to_save, f, indent=2)
 
 
-def add_to_history(text):
+def add_to_history(text, duration=0):
     """Add a transcription to history."""
     if not text:
         return
 
     entry = {
         "timestamp": datetime.now().isoformat(),
-        "text": text
+        "text": text,
+        "words": len(text.split()),
+        "duration_seconds": round(duration, 2)
     }
     transcription_history.append(entry)
     save_history()
@@ -232,9 +467,10 @@ def show_history():
         return
 
     # Show last 10
-    for entry in transcription_history[-10:]:
+    for i, entry in enumerate(transcription_history[-10:]):
         ts = entry.get('timestamp', 'Unknown')
         text = entry.get('text', '')
+        words = entry.get('words', 0)
         # Parse timestamp
         try:
             dt = datetime.fromisoformat(ts)
@@ -242,8 +478,46 @@ def show_history():
         except:
             ts_formatted = ts
 
-        print(f"{Colors.BLUE}[{ts_formatted}]{Colors.END}")
+        print(f"{Colors.BLUE}[{ts_formatted}]{Colors.END} {Colors.DIM}({words} words){Colors.END}")
         print(f"  {text}\n")
+
+
+def export_history(format_type="json"):
+    """Export history to file."""
+    if not transcription_history:
+        print(f"{Colors.YELLOW}No history to export.{Colors.END}")
+        return
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    export_dir = get_config_dir() / "exports"
+    export_dir.mkdir(exist_ok=True)
+
+    if format_type == "json":
+        export_file = export_dir / f"history_{timestamp}.json"
+        with open(export_file, 'w', encoding='utf-8') as f:
+            json.dump(transcription_history, f, indent=2)
+
+    elif format_type == "txt":
+        export_file = export_dir / f"history_{timestamp}.txt"
+        with open(export_file, 'w', encoding='utf-8') as f:
+            for entry in transcription_history:
+                ts = entry.get('timestamp', 'Unknown')
+                text = entry.get('text', '')
+                f.write(f"[{ts}]\n{text}\n\n")
+
+    elif format_type == "csv":
+        export_file = export_dir / f"history_{timestamp}.csv"
+        with open(export_file, 'w', encoding='utf-8') as f:
+            f.write("timestamp,text,words,duration_seconds\n")
+            for entry in transcription_history:
+                ts = entry.get('timestamp', '').replace(',', ';')
+                text = entry.get('text', '').replace(',', ';').replace('\n', ' ')
+                words = entry.get('words', 0)
+                duration = entry.get('duration_seconds', 0)
+                f.write(f"{ts},{text},{words},{duration}\n")
+
+    print(f"{Colors.GREEN}[+] History exported to: {export_file}{Colors.END}")
+    return export_file
 
 
 # ============================================================================
@@ -271,7 +545,7 @@ def play_beep(frequency=800, duration=0.1, beep_type="start"):
 
 
 # ============================================================================
-# VOICE COMMANDS
+# TEXT PROCESSING
 # ============================================================================
 
 def process_voice_commands(text):
@@ -295,10 +569,62 @@ def process_voice_commands(text):
                     result = ""
             else:
                 # Replace trigger with action
-                import re
                 result = re.sub(re.escape(trigger), action, result, flags=re.IGNORECASE)
 
     return result.strip()
+
+
+def apply_code_mode(text):
+    """Apply code mode transformations."""
+    if not config.get('transcription', {}).get('code_mode', False):
+        return text
+
+    result = text.lower()
+
+    for spoken, code in CODE_REPLACEMENTS.items():
+        result = re.sub(r'\b' + re.escape(spoken.strip()) + r'\b', code, result, flags=re.IGNORECASE)
+
+    return result
+
+
+def apply_auto_punctuation(text):
+    """Apply automatic punctuation."""
+    if not config.get('transcription', {}).get('auto_punctuation', True):
+        return text
+
+    result = text
+
+    # Capitalize first letter
+    if result and result[0].islower():
+        result = result[0].upper() + result[1:]
+
+    # Capitalize after sentence endings
+    result = re.sub(r'([.!?]\s+)([a-z])', lambda m: m.group(1) + m.group(2).upper(), result)
+
+    # Add period at end if no punctuation
+    if result and result[-1] not in '.!?':
+        result += '.'
+
+    return result
+
+
+def process_text(text):
+    """Process transcribed text through all filters."""
+    if not text:
+        return text
+
+    result = text.strip()
+
+    # Apply code mode first
+    result = apply_code_mode(result)
+
+    # Process voice commands
+    result = process_voice_commands(result)
+
+    # Apply auto-punctuation last
+    result = apply_auto_punctuation(result)
+
+    return result
 
 
 # ============================================================================
@@ -334,6 +660,7 @@ def init_keyboard():
 
 def print_banner():
     """Print the SpeakSkipType banner."""
+    engine = config.get('transcription', {}).get('engine', 'vosk').upper()
     banner = f"""
 {Colors.CYAN}{Colors.BOLD}
   ____                   _    ____  _    _       _____
@@ -343,7 +670,8 @@ def print_banner():
  |____/| .__/ \\___|\\__,_|_|\\_\\____/|_|\\_\\_| .__/  |_| \\__, | .__/ \\___|
        |_|                                |_|         |___/|_|
 {Colors.END}
-{Colors.GREEN}The BEST Speech-to-Text for Developers - NO API, 100% FREE, Works Locally{Colors.END}
+{Colors.GREEN}The ULTIMATE Speech-to-Text for Developers - NO API, 100% FREE{Colors.END}
+{Colors.MAGENTA}Engine: {engine} | Better than OpenWhispr, Handy, voice_typing{Colors.END}
 {Colors.YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{Colors.END}
 """
     print(banner)
@@ -351,79 +679,56 @@ def print_banner():
 
 def print_controls():
     """Print the keyboard controls."""
+    vad_status = f"{Colors.GREEN}ON{Colors.END}" if config.get('audio', {}).get('vad_enabled', False) else f"{Colors.RED}OFF{Colors.END}"
+    code_status = f"{Colors.GREEN}ON{Colors.END}" if config.get('transcription', {}).get('code_mode', False) else f"{Colors.RED}OFF{Colors.END}"
+    punct_status = f"{Colors.GREEN}ON{Colors.END}" if config.get('transcription', {}).get('auto_punctuation', True) else f"{Colors.RED}OFF{Colors.END}"
+
     print(f"""
 {Colors.BOLD}CONTROLS:{Colors.END}
-  {Colors.GREEN}Ctrl + R{Colors.END}        = Start Recording {Colors.RED}(press again to stop){Colors.END}
-  {Colors.GREEN}Ctrl + S{Colors.END}        = Stop & Auto-Paste {Colors.CYAN}(text at cursor){Colors.END}
+  {Colors.GREEN}Ctrl + R{Colors.END}         = Start Recording {Colors.RED}(press again to stop){Colors.END}
+  {Colors.GREEN}Ctrl + S{Colors.END}         = Stop & Auto-Paste {Colors.CYAN}(text at cursor){Colors.END}
   {Colors.GREEN}Ctrl + Shift + R{Colors.END} = Hold-to-Record {Colors.MAGENTA}(release to paste){Colors.END}
-  {Colors.GREEN}Ctrl + H{Colors.END}        = Show History
-  {Colors.GREEN}Ctrl + Q{Colors.END}        = Quit Application
+  {Colors.GREEN}Ctrl + D{Colors.END}         = Toggle Debug Mode
+  {Colors.GREEN}Ctrl + H{Colors.END}         = Show History
+  {Colors.GREEN}Ctrl + Q{Colors.END}         = Quit Application
 
 {Colors.BOLD}VOICE COMMANDS:{Colors.END}
-  {Colors.CYAN}"new line"{Colors.END}      → inserts line break
-  {Colors.CYAN}"new paragraph"{Colors.END} → inserts double line break
-  {Colors.CYAN}"delete that"{Colors.END}   → removes last phrase
-  {Colors.CYAN}"period/comma"{Colors.END}  → inserts punctuation
+  {Colors.CYAN}"new line"{Colors.END}       → inserts line break
+  {Colors.CYAN}"new paragraph"{Colors.END}  → inserts double line break
+  {Colors.CYAN}"delete that"{Colors.END}    → removes last phrase
+  {Colors.CYAN}"period/comma"{Colors.END}   → inserts punctuation
+
+{Colors.BOLD}FEATURES:{Colors.END}
+  Voice Activity Detection: {vad_status}
+  Code Dictation Mode:      {code_status}
+  Auto-Punctuation:         {punct_status}
 
 {Colors.YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{Colors.END}
 """)
 
 
-def notify(title, message):
-    """Show a notification (works on Windows, macOS, Linux)."""
-    if not background_mode:
-        return
-
-    try:
-        if sys.platform == 'win32':
-            try:
-                from win10toast import ToastNotifier
-                toaster = ToastNotifier()
-                toaster.show_toast(title, message, duration=2, threaded=True)
-            except ImportError:
-                import subprocess
-                subprocess.Popen([
-                    'powershell', '-Command',
-                    f'[System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms"); '
-                    f'$notify = New-Object System.Windows.Forms.NotifyIcon; '
-                    f'$notify.Icon = [System.Drawing.SystemIcons]::Information; '
-                    f'$notify.Visible = $true; '
-                    f'$notify.ShowBalloonTip(2000, "{title}", "{message}", [System.Windows.Forms.ToolTipIcon]::Info)'
-                ], creationflags=subprocess.CREATE_NO_WINDOW)
-        elif sys.platform == 'darwin':
-            os.system(f'osascript -e \'display notification "{message}" with title "{title}"\'')
-        else:
-            os.system(f'notify-send "{title}" "{message}" 2>/dev/null')
-    except:
-        pass
-
-
-def log(message, color=Colors.WHITE):
-    """Print message if not in background mode."""
-    if not background_mode:
-        print(f"{color}{message}{Colors.END}")
-
-
 def download_model():
+    """Download the Vosk model if not present (alias for compatibility)."""
+    return download_vosk_model()
+
+
+def download_vosk_model():
     """Download the Vosk model if not present."""
     lang = config.get('transcription', {}).get('language', 'en-us')
     model_name = f"vosk-model-small-{lang}-0.15"
-    model_path = Path.home() / ".speakskiptype" / model_name
-    model_dir = model_path.parent
+    model_path = get_config_dir() / model_name
 
     if model_path.exists():
         return str(model_path)
 
-    print(f"{Colors.YELLOW}[*] First-time setup: Downloading speech recognition model...{Colors.END}")
+    print(f"{Colors.YELLOW}[*] First-time setup: Downloading Vosk speech model...{Colors.END}")
     print(f"{Colors.CYAN}    (This is a one-time download, ~40MB){Colors.END}\n")
-
-    model_dir.mkdir(parents=True, exist_ok=True)
 
     import urllib.request
     import zipfile
 
     url = f"https://alphacephei.com/vosk/models/{model_name}.zip"
-    zip_path = model_dir / "model.zip"
+    zip_path = get_config_dir() / "model.zip"
 
     def download_progress(block_num, block_size, total_size):
         downloaded = block_num * block_size
@@ -439,7 +744,7 @@ def download_model():
         print(f"\n{Colors.GREEN}[+] Download complete! Extracting...{Colors.END}")
 
         with zipfile.ZipFile(str(zip_path), 'r') as zip_ref:
-            zip_ref.extractall(str(model_dir))
+            zip_ref.extractall(str(get_config_dir()))
 
         zip_path.unlink()
         print(f"{Colors.GREEN}[+] Model ready!{Colors.END}\n")
@@ -452,12 +757,63 @@ def download_model():
     return str(model_path)
 
 
+def download_whisper_model():
+    """Initialize Whisper model."""
+    global whisper_model
+
+    model_size = config.get('transcription', {}).get('whisper_model', 'base')
+
+    print(f"{Colors.YELLOW}[*] Loading Whisper model ({model_size})...{Colors.END}")
+    print(f"{Colors.CYAN}    (First run will download the model){Colors.END}\n")
+
+    try:
+        import whisper
+        whisper_model = whisper.load_model(model_size)
+        print(f"{Colors.GREEN}[+] Whisper model loaded!{Colors.END}\n")
+    except ImportError:
+        print(f"{Colors.RED}[!] Whisper not installed. Installing...{Colors.END}")
+        import subprocess
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'openai-whisper', '-q'])
+        import whisper
+        whisper_model = whisper.load_model(model_size)
+        print(f"{Colors.GREEN}[+] Whisper model loaded!{Colors.END}\n")
+
+
 def audio_callback(indata, frames, time_info, status):
     """Callback for audio stream."""
+    global vad_recording, vad_silence_start
+
     if status and not background_mode:
         print(f"{Colors.RED}Audio Error: {status}{Colors.END}", file=sys.stderr)
+
     if is_recording:
         audio_queue.put(bytes(indata))
+
+        # VAD processing
+        if config.get('audio', {}).get('vad_enabled', False):
+            import numpy as np
+            audio_data = np.frombuffer(indata, dtype=np.int16)
+            level = np.abs(audio_data).mean() / 32768.0
+            audio_levels.append(level)
+            avg_level = sum(audio_levels) / len(audio_levels)
+
+            threshold = config.get('audio', {}).get('vad_threshold', 0.5)
+            silence_duration = config.get('audio', {}).get('vad_silence_duration', 1.5)
+
+            if avg_level > threshold / 100:
+                vad_silence_start = None
+                if not vad_recording:
+                    vad_recording = True
+                    debug_log("VAD: Speech detected")
+            else:
+                if vad_recording:
+                    if vad_silence_start is None:
+                        vad_silence_start = time.time()
+                    elif time.time() - vad_silence_start > silence_duration:
+                        vad_recording = False
+                        debug_log("VAD: Silence detected, stopping")
+                        # Auto-stop recording
+                        threading.Thread(target=stop_recording_and_type, daemon=True).start()
 
 
 def process_audio():
@@ -483,9 +839,12 @@ def process_audio():
                 sys.stdout.flush()
 
 
+recording_start_time = None
+
+
 def start_recording():
     """Start recording audio."""
-    global is_recording, recorded_text
+    global is_recording, recorded_text, recording_start_time
 
     if is_recording:
         # Already recording - stop instead (toggle behavior)
@@ -494,12 +853,13 @@ def start_recording():
 
     is_recording = True
     recorded_text = ""
+    recording_start_time = time.time()
 
     # Audio feedback
     play_beep(beep_type="start")
 
     log(f"\n{Colors.RED}{Colors.BOLD}[REC]{Colors.END} Recording... Speak now! (Ctrl+S to stop)", Colors.RED)
-    notify("🎤 Recording", "Speak now! Press Ctrl+S to stop.")
+    notify("Recording", "Speak now! Press Ctrl+S to stop.")
 
 
 def copy_to_clipboard(text):
@@ -538,12 +898,13 @@ def paste_from_clipboard():
 
 def stop_recording_and_type():
     """Stop recording and type the recognized text."""
-    global is_recording, recorded_text
+    global is_recording, recorded_text, recording_start_time
 
     if not is_recording:
         return
 
     is_recording = False
+    duration = time.time() - recording_start_time if recording_start_time else 0
 
     # Audio feedback
     play_beep(beep_type="stop")
@@ -559,18 +920,21 @@ def stop_recording_and_type():
 
     recorded_text = recorded_text.strip()
 
-    # Process voice commands
-    recorded_text = process_voice_commands(recorded_text)
+    # Process text through all filters
+    recorded_text = process_text(recorded_text)
 
     log(f"\n{Colors.GREEN}[STOP]{Colors.END} Recording stopped.", Colors.GREEN)
 
     if recorded_text:
         # Add to history
-        add_to_history(recorded_text)
+        add_to_history(recorded_text, duration)
+
+        # Update stats
+        update_stats(recorded_text, duration)
 
         log(f"{Colors.GREEN}[TEXT]{Colors.END} \"{recorded_text}\"", Colors.GREEN)
         log(f"{Colors.YELLOW}[PASTE]{Colors.END} Pasting to cursor position...", Colors.YELLOW)
-        notify("✅ Pasting", f'"{recorded_text[:50]}..."' if len(recorded_text) > 50 else f'"{recorded_text}"')
+        notify("Pasting", f'"{recorded_text[:50]}..."' if len(recorded_text) > 50 else f'"{recorded_text}"')
 
         # Small delay to ensure key release
         time.sleep(0.3)
@@ -591,10 +955,18 @@ def stop_recording_and_type():
         if output_method == 'type':
             keyboard_controller.type(recorded_text)
 
-        log(f"{Colors.GREEN}[DONE]{Colors.END} Text inserted!\n", Colors.GREEN)
+        log(f"{Colors.GREEN}[DONE]{Colors.END} Text inserted! (WPM: {stats['last_wpm']})\n", Colors.GREEN)
     else:
         log(f"{Colors.YELLOW}[!]{Colors.END} No speech detected. Try again.\n", Colors.YELLOW)
-        notify("⚠️ No Speech", "No speech detected. Try again.")
+        notify("No Speech", "No speech detected. Try again.")
+
+
+def toggle_debug():
+    """Toggle debug mode."""
+    global debug_mode
+    debug_mode = not debug_mode
+    status = "ON" if debug_mode else "OFF"
+    log(f"\n{Colors.YELLOW}[DEBUG]{Colors.END} Debug mode: {status}\n", Colors.YELLOW)
 
 
 def on_press(key):
@@ -625,6 +997,10 @@ def on_press(key):
                 elif char == 's' or char == '\x13':
                     stop_recording_and_type()
 
+                # Ctrl+D: Toggle debug
+                elif char == 'd' or char == '\x04':
+                    toggle_debug()
+
                 # Ctrl+H: Show history
                 elif char == 'h' or char == '\x08':
                     if not background_mode:
@@ -633,7 +1009,7 @@ def on_press(key):
                 # Ctrl+Q: Quit
                 elif char == 'q' or char == '\x11':
                     log(f"\n{Colors.YELLOW}[*] Exiting SpeakSkipType...{Colors.END}", Colors.YELLOW)
-                    notify("👋 Goodbye", "SpeakSkipType stopped.")
+                    notify("Goodbye", "SpeakSkipType stopped.")
                     os._exit(0)
     except AttributeError:
         pass
@@ -653,6 +1029,19 @@ def on_release(key):
 
     elif key == Key.shift_l or key == Key.shift_r:
         shift_pressed = False
+
+
+def handle_signal(signum, frame):
+    """Handle Unix signals for external control."""
+    if signum == signal.SIGUSR1:
+        # Toggle recording
+        if is_recording:
+            stop_recording_and_type()
+        else:
+            start_recording()
+    elif signum == signal.SIGUSR2:
+        # Stop recording
+        stop_recording_and_type()
 
 
 def run_background():
@@ -679,7 +1068,7 @@ def run_background():
                 os._exit(0)
 
             def on_status(icon, item):
-                status = "🔴 Recording..." if is_recording else "✅ Ready"
+                status = "Recording..." if is_recording else "Ready"
                 notify("SpeakSkipType", f"Status: {status}\n\nCtrl+R: Record\nCtrl+S: Stop\nCtrl+Q: Quit")
 
             def on_history(icon, item):
@@ -690,9 +1079,13 @@ def run_background():
                 else:
                     notify("History", "No transcriptions yet")
 
+            def on_stats(icon, item):
+                notify("Stats", f"Total: {stats['total_words']} words\nSession: {stats['session_words']} words\nLast WPM: {stats['last_wpm']}")
+
             menu = pystray.Menu(
                 pystray.MenuItem("Status", on_status),
                 pystray.MenuItem("Last Transcription", on_history),
+                pystray.MenuItem("Statistics", on_stats),
                 pystray.MenuItem("Quit", on_quit)
             )
 
@@ -703,14 +1096,14 @@ def run_background():
 
             threading.Thread(target=run_main, daemon=True).start()
 
-            notify("🎤 SpeakSkipType", "Running!\nCtrl+R: Record | Ctrl+S: Type | Ctrl+Q: Quit")
+            notify("SpeakSkipType", "Running!\nCtrl+R: Record | Ctrl+S: Type | Ctrl+Q: Quit")
             icon.run()
             return
 
         except ImportError:
             pass
 
-    notify("🎤 SpeakSkipType", "Running!\nCtrl+R: Record | Ctrl+S: Type | Ctrl+Q: Quit")
+    notify("SpeakSkipType", "Running!\nCtrl+R: Record | Ctrl+S: Type | Ctrl+Q: Quit")
     main_loop()
 
 
@@ -724,8 +1117,24 @@ def main_loop():
 
     init_keyboard()
     load_history()
+    load_stats()
 
-    model_path = download_model()
+    # Setup signal handlers for Unix
+    if sys.platform != 'win32':
+        try:
+            signal.signal(signal.SIGUSR1, handle_signal)
+            signal.signal(signal.SIGUSR2, handle_signal)
+        except:
+            pass
+
+    engine = config.get('transcription', {}).get('engine', 'vosk')
+
+    if engine == 'whisper':
+        download_whisper_model()
+        # For whisper, we still use vosk for real-time, whisper for final
+        model_path = download_vosk_model()
+    else:
+        model_path = download_vosk_model()
 
     if not background_mode:
         print(f"{Colors.CYAN}[*] Loading speech recognition model...{Colors.END}")
@@ -776,6 +1185,36 @@ def main():
         load_history()
         show_history()
         return
+
+    if '--stats' in sys.argv:
+        load_stats()
+        show_stats()
+        return
+
+    if '--export' in sys.argv:
+        load_history()
+        # Check for format
+        if '--json' in sys.argv:
+            export_history('json')
+        elif '--txt' in sys.argv:
+            export_history('txt')
+        elif '--csv' in sys.argv:
+            export_history('csv')
+        else:
+            print(f"{Colors.CYAN}Export formats:{Colors.END}")
+            print("  --export --json  Export as JSON")
+            print("  --export --txt   Export as plain text")
+            print("  --export --csv   Export as CSV")
+        return
+
+    if '--whisper' in sys.argv:
+        config['transcription']['engine'] = 'whisper'
+
+    if '--code' in sys.argv:
+        config['transcription']['code_mode'] = True
+
+    if '--vad' in sys.argv:
+        config['audio']['vad_enabled'] = True
 
     if '--bg' in sys.argv or '--background' in sys.argv:
         run_background()

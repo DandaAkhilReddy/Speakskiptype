@@ -119,44 +119,56 @@ class TestStopRecording:
 
     def test_stop_recording_types_text(self):
         """Test that stop_recording types the recorded text."""
+        import copy
         speakskiptype.is_recording = True
         speakskiptype.recorded_text = "hello world"
-        
+        # Ensure config is properly set up
+        speakskiptype.config = copy.deepcopy(speakskiptype.DEFAULT_CONFIG)
+        speakskiptype.config['transcription']['auto_punctuation'] = False
+        speakskiptype.config['output']['add_space_after'] = False
+
         mock_recognizer = Mock()
         mock_recognizer.FinalResult.return_value = '{"text": ""}'
         speakskiptype.recognizer = mock_recognizer
-        
+
         mock_controller = Mock()
         speakskiptype.keyboard_controller = mock_controller
-        
+
         with patch.object(speakskiptype, 'play_beep'):
             with patch.object(speakskiptype, 'copy_to_clipboard', return_value=True) as mock_copy:
                 with patch.object(speakskiptype, 'paste_from_clipboard'):
                     with patch.object(speakskiptype, 'add_to_history'):
-                        with patch('time.sleep'):
-                            speakskiptype.stop_recording_and_type()
-        
+                        with patch.object(speakskiptype, 'update_stats'):
+                            with patch('time.sleep'):
+                                speakskiptype.stop_recording_and_type()
+
         mock_copy.assert_called_once_with("hello world")
 
     def test_stop_recording_appends_final_text(self):
         """Test that final recognition result is appended."""
+        import copy
         speakskiptype.is_recording = True
         speakskiptype.recorded_text = "hello "
-        
+        # Ensure config is properly set up
+        speakskiptype.config = copy.deepcopy(speakskiptype.DEFAULT_CONFIG)
+        speakskiptype.config['transcription']['auto_punctuation'] = False
+        speakskiptype.config['output']['add_space_after'] = False
+
         mock_recognizer = Mock()
         mock_recognizer.FinalResult.return_value = '{"text": "world"}'
         speakskiptype.recognizer = mock_recognizer
-        
+
         mock_controller = Mock()
         speakskiptype.keyboard_controller = mock_controller
-        
+
         with patch.object(speakskiptype, 'play_beep'):
             with patch.object(speakskiptype, 'copy_to_clipboard', return_value=True) as mock_copy:
                 with patch.object(speakskiptype, 'paste_from_clipboard'):
                     with patch.object(speakskiptype, 'add_to_history'):
-                        with patch('time.sleep'):
-                            speakskiptype.stop_recording_and_type()
-        
+                        with patch.object(speakskiptype, 'update_stats'):
+                            with patch('time.sleep'):
+                                speakskiptype.stop_recording_and_type()
+
         # Should have combined text
         call_arg = mock_copy.call_args[0][0]
         assert "hello" in call_arg

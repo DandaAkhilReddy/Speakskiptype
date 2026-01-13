@@ -61,10 +61,10 @@ class TestDownloadModel:
     def test_download_url_is_correct(self):
         """Test that download URL is correctly formatted."""
         speakskiptype.config = {'transcription': {'language': 'en-us'}}
-        
-        # Check URL format by examining function
+
+        # Check URL format by examining function (check download_vosk_model for actual implementation)
         import inspect
-        source = inspect.getsource(speakskiptype.download_model)
+        source = inspect.getsource(speakskiptype.download_vosk_model)
         assert "alphacephei.com/vosk/models" in source
 
 
