@@ -634,9 +634,19 @@ def remove_filler_words(text):
 
     result = text
 
-    for filler in FILLER_WORDS:
-        # Remove filler word with surrounding spaces
-        pattern = r'\b' + re.escape(filler) + r'\b\s*'
+    # Sort filler words by length (longest first) to handle multi-word phrases properly
+    sorted_fillers = sorted(FILLER_WORDS, key=len, reverse=True)
+
+    for filler in sorted_fillers:
+        # For multi-word fillers, match with flexible spacing
+        if ' ' in filler:
+            # Replace spaces with flexible whitespace pattern
+            filler_pattern = r'\b' + r'\s+'.join(re.escape(word) for word in filler.split()) + r'\b'
+        else:
+            filler_pattern = r'\b' + re.escape(filler) + r'\b'
+
+        # Remove filler word (with optional trailing space/comma)
+        pattern = filler_pattern + r'[,]?\s*'
         result = re.sub(pattern, ' ', result, flags=re.IGNORECASE)
 
     # Clean up multiple spaces
