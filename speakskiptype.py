@@ -1048,41 +1048,59 @@ def on_press(key):
         # Track modifier keys
         if key == Key.ctrl_l or key == Key.ctrl_r:
             ctrl_pressed = True
+            return
         elif key == Key.shift_l or key == Key.shift_r:
             shift_pressed = True
-        elif ctrl_pressed:
-            if hasattr(key, 'char'):
-                char = key.char
+            return
 
-                # Ctrl+Shift+R: Hold-to-record
-                if shift_pressed and (char == 'r' or char == '\x12' or char == 'R'):
-                    if not hold_to_record_active:
-                        hold_to_record_active = True
-                        start_recording()
+        if ctrl_pressed:
+            # Get the key character - handle both char attribute and vk (virtual key) codes
+            char = None
+            vk = None
 
-                # Ctrl+R: Toggle recording
-                elif char == 'r' or char == '\x12':
+            if hasattr(key, 'char') and key.char:
+                char = key.char.lower() if key.char else None
+            if hasattr(key, 'vk'):
+                vk = key.vk
+
+            # Virtual key codes for Windows: R=82, S=83, D=68, H=72, Q=81
+            is_r = char == 'r' or char == '\x12' or vk == 82
+            is_s = char == 's' or char == '\x13' or vk == 83
+            is_d = char == 'd' or char == '\x04' or vk == 68
+            is_h = char == 'h' or char == '\x08' or vk == 72
+            is_q = char == 'q' or char == '\x11' or vk == 81
+
+            # Ctrl+Shift+R: Hold-to-record
+            if shift_pressed and is_r:
+                if not hold_to_record_active:
+                    hold_to_record_active = True
                     start_recording()
 
-                # Ctrl+S: Stop and type
-                elif char == 's' or char == '\x13':
-                    stop_recording_and_type()
+            # Ctrl+R: Toggle recording
+            elif is_r:
+                start_recording()
 
-                # Ctrl+D: Toggle debug
-                elif char == 'd' or char == '\x04':
-                    toggle_debug()
+            # Ctrl+S: Stop and type
+            elif is_s:
+                stop_recording_and_type()
 
-                # Ctrl+H: Show history
-                elif char == 'h' or char == '\x08':
-                    if not background_mode:
-                        show_history()
+            # Ctrl+D: Toggle debug
+            elif is_d:
+                toggle_debug()
 
-                # Ctrl+Q: Quit
-                elif char == 'q' or char == '\x11':
-                    log(f"\n{Colors.YELLOW}[*] Exiting SpeakSkipType...{Colors.END}", Colors.YELLOW)
-                    notify("Goodbye", "SpeakSkipType stopped.")
-                    os._exit(0)
+            # Ctrl+H: Show history
+            elif is_h:
+                if not background_mode:
+                    show_history()
+
+            # Ctrl+Q: Quit
+            elif is_q:
+                log(f"\n{Colors.YELLOW}[*] Exiting SpeakSkipType...{Colors.END}", Colors.YELLOW)
+                notify("Goodbye", "SpeakSkipType stopped.")
+                os._exit(0)
     except AttributeError:
+        pass
+    except Exception:
         pass
 
 
