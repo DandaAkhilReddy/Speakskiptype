@@ -78,6 +78,8 @@ Every developer has been stuck in this painful loop:
 git clone https://github.com/DandaAkhilReddy/Speakskiptype.git && cd Speakskiptype && pip install -r requirements.txt && python speakskiptype.py
 ```
 
+> **Note:** On first run, wait 2-5 minutes for the speech model to download (~40MB). This only happens once!
+
 ### That's it! Now:
 1. Press **`Ctrl+R`** to start recording
 2. **Speak** your text
@@ -165,8 +167,32 @@ pip install -r requirements.txt
 python speakskiptype.py
 ```
 
-### First Run
-The tool automatically downloads the speech model (~40MB, one-time only).
+### First Run - IMPORTANT!
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  ⚠️  FIRST RUN: Please wait 2-5 minutes for model download!            │
+│                                                                         │
+│  The speech recognition model (~40MB) downloads automatically.          │
+│  You'll see: "[*] Downloading speech model (first time only)..."       │
+│                                                                         │
+│  ✓ This only happens ONCE                                               │
+│  ✓ After download, the app starts instantly                             │
+│  ✓ Model is saved to ~/.speakskiptype/                                  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**What to expect on first run:**
+1. App starts and shows "Downloading speech model..."
+2. **Wait 2-5 minutes** (depending on internet speed)
+3. You'll see "Model downloaded!" when complete
+4. The main interface appears - you're ready to go!
+
+**If it seems stuck:**
+- The download is happening in the background
+- No progress bar is shown (this is normal)
+- Just wait - it WILL complete
+- Check `~/.speakskiptype/` folder to see if model is downloading
 
 ---
 
