@@ -62,7 +62,7 @@ Every developer has been stuck in this painful loop:
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                                                             │
-│   Press Ctrl+R  →  🗣️ Speak  →  Press Ctrl+S  →  ✅ Done!   │
+│   Press Alt+R  →  🗣️ Speak  →  Press Alt+S  →  ✅ Done!   │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
               ⬆️  Just 2 STEPS with SpeakSkipType!  ⬆️
@@ -81,9 +81,9 @@ git clone https://github.com/DandaAkhilReddy/Speakskiptype.git && cd Speakskipty
 > **Note:** On first run, wait **2-15 minutes** for the speech model to download (~40MB). Time depends on your internet speed. This only happens once!
 
 ### That's it! Now:
-1. Press **`Ctrl+R`** to start recording
+1. Press **`Alt+R`** to start recording
 2. **Speak** your text
-3. Press **`Ctrl+S`** to stop & paste
+3. Press **`Alt+S`** to stop & paste
 
 ---
 
@@ -91,12 +91,11 @@ git clone https://github.com/DandaAkhilReddy/Speakskiptype.git && cd Speakskipty
 
 | Shortcut | Action | Description |
 |:--------:|:------:|:------------|
-| `Ctrl + R` | 🔴 **Toggle Record** | Start/Stop recording |
-| `Ctrl + S` | ✅ **Stop & Paste** | Stop recording and paste text |
-| `Ctrl + Shift + R` | 🎯 **Hold-to-Record** | Hold to record, release to paste |
+| `Alt + R` | 🔴 **Start Record** | Start recording (no terminal conflict!) |
+| `Alt + S` | ✅ **Stop & Paste** | Stop recording and paste text |
+| `Alt + Q` | 🚪 **Quit** | Exit application |
 | `Ctrl + D` | 🐛 **Debug Mode** | Toggle debug output |
 | `Ctrl + H` | 📜 **History** | Show transcription history |
-| `Ctrl + Q` | 🚪 **Quit** | Exit application |
 
 ---
 
@@ -239,9 +238,9 @@ python speakskiptype.py
 ┌────────────────────────────────────────────────────────────┐
 │  1. Open Notepad (or any text editor)                      │
 │  2. Click inside Notepad so cursor is there                │
-│  3. Press Ctrl+R (you'll hear a beep - recording started)  │
+│  3. Press Alt+R (you'll hear a beep - recording started)  │
 │  4. Say: "Hello world this is a test"                      │
-│  5. Press Ctrl+S (you'll hear a beep - recording stopped)  │
+│  5. Press Alt+S (you'll hear a beep - recording stopped)  │
 │  6. Watch the text appear in Notepad! ✨                   │
 └────────────────────────────────────────────────────────────┘
 ```
@@ -309,11 +308,11 @@ Use this checklist to verify everything works:
 | # | Test | Expected Result | Status |
 |:-:|:-----|:----------------|:------:|
 | 1 | Run `python speakskiptype.py` | Banner appears with controls | ⬜ |
-| 2 | Press `Ctrl+R` | See `[REC] Recording...` + beep | ⬜ |
+| 2 | Press `Alt+R` | See `[REC] Recording...` + beep | ⬜ |
 | 3 | Speak "hello world" | See `Hearing: hello world...` | ⬜ |
-| 4 | Press `Ctrl+S` | See `[STOP]` + `[DONE]` + beep | ⬜ |
+| 4 | Press `Alt+S` | See `[STOP]` + `[DONE]` + beep | ⬜ |
 | 5 | Check Notepad/editor | Text "hello world" appeared | ⬜ |
-| 6 | Press `Ctrl+Q` | App exits cleanly | ⬜ |
+| 6 | Press `Alt+Q` | App exits cleanly | ⬜ |
 
 ---
 
@@ -362,7 +361,7 @@ pip install vosk
 <summary><b>❌ Text not appearing in editor</b></summary>
 
 1. Make sure the editor window is focused/active
-2. Try clicking in the editor right before pressing Ctrl+S
+2. Try clicking in the editor right before pressing Alt+S
 3. Check if clipboard is working: `python -c "import pyperclip; pyperclip.copy('test'); print(pyperclip.paste())"`
 </details>
 
