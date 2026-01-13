@@ -51,12 +51,15 @@ class TestGlobalHotkeyIntegration:
         mock_key_s.char = 's'
 
         with patch('time.sleep'):
-            speakskiptype.on_press(mock_key_s)
+            with patch.object(speakskiptype, 'copy_to_clipboard', return_value=True) as mock_copy:
+                with patch.object(speakskiptype, 'paste_from_clipboard') as mock_paste:
+                    speakskiptype.on_press(mock_key_s)
 
         assert speakskiptype.is_recording is False
-        mock_controller.type.assert_called_once()
-        typed_text = mock_controller.type.call_args[0][0]
-        assert "hello" in typed_text
+        # Text should be copied to clipboard and pasted
+        assert mock_copy.called
+        copied_text = mock_copy.call_args[0][0]
+        assert "hello" in copied_text
 
     def test_multiple_recording_sessions(self):
         """Test multiple recording sessions work correctly."""
@@ -65,26 +68,28 @@ class TestGlobalHotkeyIntegration:
         speakskiptype.recognizer = mock_recognizer
         speakskiptype.keyboard_controller = mock_controller
 
-        for i in range(3):
-            mock_recognizer.FinalResult.return_value = f'{{"text": "session {i}"}}'
+        with patch.object(speakskiptype, 'copy_to_clipboard', return_value=True) as mock_copy:
+            with patch.object(speakskiptype, 'paste_from_clipboard'):
+                for i in range(3):
+                    mock_recognizer.FinalResult.return_value = f'{{"text": "session {i}"}}'
 
-            # Start recording
-            speakskiptype.ctrl_pressed = True
-            speakskiptype.is_recording = False
-            speakskiptype.start_recording()
-            assert speakskiptype.is_recording is True
+                    # Start recording
+                    speakskiptype.ctrl_pressed = True
+                    speakskiptype.is_recording = False
+                    speakskiptype.start_recording()
+                    assert speakskiptype.is_recording is True
 
-            # Add some text
-            speakskiptype.recorded_text = f"test {i} "
+                    # Add some text
+                    speakskiptype.recorded_text = f"test {i} "
 
-            # Stop recording
-            with patch('time.sleep'):
-                speakskiptype.stop_recording_and_type()
+                    # Stop recording
+                    with patch('time.sleep'):
+                        speakskiptype.stop_recording_and_type()
 
-            assert speakskiptype.is_recording is False
+                    assert speakskiptype.is_recording is False
 
-        # Should have typed 3 times
-        assert mock_controller.type.call_count == 3
+        # Should have copied 3 times (using clipboard now)
+        assert mock_copy.call_count == 3
 
     def test_keyboard_listener_doesnt_suppress_events(self):
         """Test that keyboard events are not suppressed (for global use)."""
@@ -122,20 +127,22 @@ class TestBackgroundModeIntegration:
         speakskiptype.keyboard_controller = mock_controller
 
         with patch.object(speakskiptype, 'notify') as mock_notify:
-            # Start recording
-            speakskiptype.start_recording()
-            assert speakskiptype.is_recording is True
-            assert mock_notify.called
+            with patch.object(speakskiptype, 'copy_to_clipboard', return_value=True) as mock_copy:
+                with patch.object(speakskiptype, 'paste_from_clipboard'):
+                    # Start recording
+                    speakskiptype.start_recording()
+                    assert speakskiptype.is_recording is True
+                    assert mock_notify.called
 
-            # Add text
-            speakskiptype.recorded_text = "test "
+                    # Add text
+                    speakskiptype.recorded_text = "test "
 
-            # Stop and type
-            with patch('time.sleep'):
-                speakskiptype.stop_recording_and_type()
+                    # Stop and type
+                    with patch('time.sleep'):
+                        speakskiptype.stop_recording_and_type()
 
-            assert speakskiptype.is_recording is False
-            mock_controller.type.assert_called_once()
+                    assert speakskiptype.is_recording is False
+                    mock_copy.assert_called_once()
 
         speakskiptype.background_mode = False
 
@@ -171,7 +178,7 @@ class TestQuitIntegration:
         mock_key = Mock()
         mock_key.char = 'q'
 
-        with patch('os._exit') as mock_exit:
+        with patch.object(speakskiptype.os, '_exit') as mock_exit:
             with patch.object(speakskiptype, 'notify'):
                 speakskiptype.on_press(mock_key)
                 mock_exit.assert_called_once_with(0)
@@ -184,7 +191,7 @@ class TestQuitIntegration:
         mock_key = Mock()
         mock_key.char = 'q'
 
-        with patch('os._exit'):
+        with patch.object(speakskiptype.os, '_exit'):
             with patch.object(speakskiptype, 'notify') as mock_notify:
                 speakskiptype.on_press(mock_key)
                 assert mock_notify.called
@@ -248,19 +255,27 @@ class TestConcurrentAccess:
         assert speakskiptype.is_recording is False
 
     def test_double_start_is_safe(self):
-        """Test calling start_recording twice is safe."""
+        """Test calling start_recording twice is safe - toggles on second call."""
         speakskiptype.is_recording = False
 
+        # Setup mocks for stop
+        mock_recognizer = Mock()
+        mock_recognizer.FinalResult.return_value = '{"text": ""}'
+        speakskiptype.recognizer = mock_recognizer
+        speakskiptype.keyboard_controller = Mock()
+
         speakskiptype.start_recording()
         assert speakskiptype.is_recording is True
 
-        # Second start should be no-op
+        # Second start toggles (stops) - this is the new toggle behavior
         speakskiptype.recorded_text = "some text"
-        speakskiptype.start_recording()
-        assert speakskiptype.is_recording is True
-        # Text should NOT be cleared on second start
-        # Actually it would be since we return early - let's check
-        # The function returns early if already recording
+        with patch('time.sleep'):
+            with patch.object(speakskiptype, 'copy_to_clipboard', return_value=True):
+                with patch.object(speakskiptype, 'paste_from_clipboard'):
+                    speakskiptype.start_recording()
+
+        # Toggle behavior: now stopped
+        assert speakskiptype.is_recording is False
 
     def test_double_stop_is_safe(self):
         """Test calling stop_recording twice is safe."""

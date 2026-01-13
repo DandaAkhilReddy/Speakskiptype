@@ -20,6 +20,8 @@ class MockKey:
     """Mock Key class for testing."""
     ctrl_l = Mock()
     ctrl_r = Mock()
+    shift_l = Mock()
+    shift_r = Mock()
 
 
 class TestFullRecordingFlow:
@@ -73,27 +75,38 @@ class TestFullRecordingFlow:
         mock_key_s = Mock()
         mock_key_s.char = 's'
         with patch('time.sleep'):
-            speakskiptype.on_press(mock_key_s)
+            with patch.object(speakskiptype, 'copy_to_clipboard', return_value=True) as mock_copy:
+                with patch.object(speakskiptype, 'paste_from_clipboard'):
+                    speakskiptype.on_press(mock_key_s)
 
         # Verify results
         assert speakskiptype.is_recording is False
-        mock_controller.type.assert_called_once_with("hello world")
+        mock_copy.assert_called_once()
+        assert "hello world" in mock_copy.call_args[0][0]
 
         # Step 6: Release Ctrl
         speakskiptype.on_release(MockKey.ctrl_l)
         assert speakskiptype.ctrl_pressed is False
 
     def test_recording_cancellation_by_restart(self):
-        """Test that starting a new recording doesn't clear ongoing recording."""
+        """Test that starting again while recording toggles (stops) - new toggle behavior."""
         speakskiptype.is_recording = True
         speakskiptype.recorded_text = "ongoing speech"
 
-        # Try to start recording again
-        speakskiptype.start_recording()
+        # Setup mocks for stop
+        mock_recognizer = Mock()
+        mock_recognizer.FinalResult.return_value = '{"text": ""}'
+        speakskiptype.recognizer = mock_recognizer
+        speakskiptype.keyboard_controller = Mock()
 
-        # Should NOT clear the text since already recording
-        assert speakskiptype.recorded_text == "ongoing speech"
-        assert speakskiptype.is_recording is True
+        # Try to start recording again - should toggle and stop
+        with patch('time.sleep'):
+            with patch.object(speakskiptype, 'copy_to_clipboard', return_value=True):
+                with patch.object(speakskiptype, 'paste_from_clipboard'):
+                    speakskiptype.start_recording()
+
+        # Toggle behavior: stops recording
+        assert speakskiptype.is_recording is False
 
     def test_stop_without_start_does_nothing(self):
         """Test that stopping when not recording does nothing harmful."""
@@ -126,22 +139,24 @@ class TestFullRecordingFlow:
         mock_controller = Mock()
         speakskiptype.keyboard_controller = mock_controller
 
-        # Session 1
-        speakskiptype.start_recording()
-        speakskiptype.recorded_text = "first session"
-        with patch('time.sleep'):
-            speakskiptype.stop_recording_and_type()
+        with patch.object(speakskiptype, 'copy_to_clipboard', return_value=True) as mock_copy:
+            with patch.object(speakskiptype, 'paste_from_clipboard'):
+                # Session 1
+                speakskiptype.start_recording()
+                speakskiptype.recorded_text = "first session"
+                with patch('time.sleep'):
+                    speakskiptype.stop_recording_and_type()
 
-        assert mock_controller.type.call_args_list[0][0][0] == "first session"
+                assert mock_copy.call_args_list[0][0][0] == "first session"
 
-        # Session 2
-        speakskiptype.start_recording()
-        assert speakskiptype.recorded_text == ""  # Should be cleared
-        speakskiptype.recorded_text = "second session"
-        with patch('time.sleep'):
-            speakskiptype.stop_recording_and_type()
+                # Session 2
+                speakskiptype.start_recording()
+                assert speakskiptype.recorded_text == ""  # Should be cleared
+                speakskiptype.recorded_text = "second session"
+                with patch('time.sleep'):
+                    speakskiptype.stop_recording_and_type()
 
-        assert mock_controller.type.call_args_list[1][0][0] == "second session"
+                assert mock_copy.call_args_list[1][0][0] == "second session"
 
 
 class TestAudioProcessingIntegration:

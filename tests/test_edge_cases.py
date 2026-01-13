@@ -253,19 +253,30 @@ class TestStateTransitions:
     """Test state machine transitions."""
 
     def test_double_start_recording(self):
-        """Test calling start_recording twice."""
+        """Test calling start_recording twice - should TOGGLE (stop on second call)."""
         speakskiptype.is_recording = False
         speakskiptype.recorded_text = "existing"
+
+        # Mock dependencies for stop
+        mock_recognizer = Mock()
+        mock_recognizer.FinalResult.return_value = '{"text": ""}'
+        speakskiptype.recognizer = mock_recognizer
+        mock_controller = Mock()
+        speakskiptype.keyboard_controller = mock_controller
 
         speakskiptype.start_recording()
         assert speakskiptype.is_recording is True
         assert speakskiptype.recorded_text == ""
 
-        # Start again - should be idempotent
+        # Start again - should TOGGLE (stop recording)
         speakskiptype.recorded_text = "new text"
-        speakskiptype.start_recording()
-        assert speakskiptype.is_recording is True
-        assert speakskiptype.recorded_text == "new text"  # Not cleared
+        with patch('time.sleep'):
+            with patch.object(speakskiptype, 'copy_to_clipboard', return_value=True):
+                with patch.object(speakskiptype, 'paste_from_clipboard'):
+                    speakskiptype.start_recording()
+
+        # Toggle behavior: second call stops recording
+        assert speakskiptype.is_recording is False
 
     def test_stop_when_not_recording(self):
         """Test calling stop when not recording."""

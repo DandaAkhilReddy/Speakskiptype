@@ -17,6 +17,9 @@ class MockKey:
     """Mock Key class for testing keyboard events."""
     ctrl_l = Mock()
     ctrl_r = Mock()
+    shift_l = Mock()
+    shift_r = Mock()
+    ctrl = Mock()
 
 
 @pytest.fixture
@@ -74,6 +77,9 @@ def reset_globals():
     speakskiptype.is_recording = False
     speakskiptype.recorded_text = ""
     speakskiptype.ctrl_pressed = False
+    speakskiptype.shift_pressed = False
+    speakskiptype.hold_to_record_active = False
+    speakskiptype.background_mode = False
     speakskiptype.Key = MockKey
     # Clear the audio queue
     while not speakskiptype.audio_queue.empty():
