@@ -170,6 +170,181 @@ The tool automatically downloads the speech model (~40MB, one-time only).
 
 ---
 
+## 🧪 How to Test (Step-by-Step)
+
+### 📋 Before You Start
+Make sure you have:
+- ✅ Python 3.7+ installed (`python --version` to check)
+- ✅ A working microphone
+- ✅ Speakers/headphones (to hear beep feedback)
+
+---
+
+### 🪟 Windows Testing
+
+**Step 1: Open Command Prompt**
+```cmd
+Win + R → type "cmd" → Enter
+```
+
+**Step 2: Navigate to the folder**
+```cmd
+cd C:\Users\YourUsername\Speakskiptype
+```
+
+**Step 3: Install dependencies**
+```cmd
+pip install vosk sounddevice pynput pyperclip
+```
+
+**Step 4: Run the app**
+```cmd
+python speakskiptype.py
+```
+
+**Step 5: Test it!**
+```
+┌────────────────────────────────────────────────────────────┐
+│  1. Open Notepad (or any text editor)                      │
+│  2. Click inside Notepad so cursor is there                │
+│  3. Press Ctrl+R (you'll hear a beep - recording started)  │
+│  4. Say: "Hello world this is a test"                      │
+│  5. Press Ctrl+S (you'll hear a beep - recording stopped)  │
+│  6. Watch the text appear in Notepad! ✨                   │
+└────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 🍎 macOS Testing
+
+**Step 1: Open Terminal**
+```bash
+Cmd + Space → type "Terminal" → Enter
+```
+
+**Step 2: Navigate and install**
+```bash
+cd ~/Speakskiptype
+pip3 install vosk sounddevice pynput pyperclip
+```
+
+**Step 3: Grant permissions**
+- Go to System Preferences → Security & Privacy → Privacy
+- Enable **Microphone** access for Terminal
+- Enable **Accessibility** access for Terminal (for hotkeys)
+
+**Step 4: Run and test**
+```bash
+python3 speakskiptype.py
+```
+
+---
+
+### 🐧 Linux Testing
+
+**Step 1: Open Terminal**
+```bash
+Ctrl + Alt + T
+```
+
+**Step 2: Install system dependencies**
+```bash
+# Ubuntu/Debian
+sudo apt install python3-pip portaudio19-dev
+
+# Fedora
+sudo dnf install python3-pip portaudio-devel
+```
+
+**Step 3: Install Python packages**
+```bash
+cd ~/Speakskiptype
+pip3 install vosk sounddevice pynput pyperclip
+```
+
+**Step 4: Run and test**
+```bash
+python3 speakskiptype.py
+```
+
+---
+
+### ✅ Test Checklist
+
+Use this checklist to verify everything works:
+
+| # | Test | Expected Result | Status |
+|:-:|:-----|:----------------|:------:|
+| 1 | Run `python speakskiptype.py` | Banner appears with controls | ⬜ |
+| 2 | Press `Ctrl+R` | See `[REC] Recording...` + beep | ⬜ |
+| 3 | Speak "hello world" | See `Hearing: hello world...` | ⬜ |
+| 4 | Press `Ctrl+S` | See `[STOP]` + `[DONE]` + beep | ⬜ |
+| 5 | Check Notepad/editor | Text "hello world" appeared | ⬜ |
+| 6 | Press `Ctrl+Q` | App exits cleanly | ⬜ |
+
+---
+
+### 🎤 Test Filler Word Removal
+
+**Say this:**
+> "Um I would like to you know test this application"
+
+**Expected output:**
+> "I would like to test this application"
+
+The filler words (um, you know) are automatically removed! ✨
+
+---
+
+### 🔊 Test Voice Commands
+
+| Say This | Expected Output |
+|:---------|:----------------|
+| "hello period" | hello. |
+| "new line test" | hello<br>test |
+| "open paren test close paren" | (test) |
+
+---
+
+### 🐛 Common Issues & Fixes
+
+<details>
+<summary><b>❌ "No module named 'vosk'"</b></summary>
+
+```bash
+pip install vosk
+```
+</details>
+
+<details>
+<summary><b>❌ "No speech detected" every time</b></summary>
+
+1. Check microphone is not muted
+2. Check microphone permissions in system settings
+3. Try speaking louder/closer to mic
+4. Run: `python -c "import sounddevice; print(sounddevice.query_devices())"` to see devices
+</details>
+
+<details>
+<summary><b>❌ Text not appearing in editor</b></summary>
+
+1. Make sure the editor window is focused/active
+2. Try clicking in the editor right before pressing Ctrl+S
+3. Check if clipboard is working: `python -c "import pyperclip; pyperclip.copy('test'); print(pyperclip.paste())"`
+</details>
+
+<details>
+<summary><b>❌ Hotkeys not working (Windows)</b></summary>
+
+Run Command Prompt as Administrator:
+1. Search "cmd" in Start Menu
+2. Right-click → "Run as administrator"
+3. Try again
+</details>
+
+---
+
 ## 🎮 Usage Examples
 
 ### Basic Usage
