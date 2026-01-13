@@ -78,7 +78,7 @@ Every developer has been stuck in this painful loop:
 git clone https://github.com/DandaAkhilReddy/Speakskiptype.git && cd Speakskiptype && pip install -r requirements.txt && python speakskiptype.py
 ```
 
-> **Note:** On first run, wait 2-5 minutes for the speech model to download (~40MB). This only happens once!
+> **Note:** On first run, wait **2-15 minutes** for the speech model to download (~40MB). Time depends on your internet speed. This only happens once!
 
 ### That's it! Now:
 1. Press **`Ctrl+R`** to start recording
@@ -171,10 +171,15 @@ python speakskiptype.py
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  ⚠️  FIRST RUN: Please wait 2-5 minutes for model download!            │
+│  ⚠️  FIRST RUN: Please wait for model download!                         │
 │                                                                         │
 │  The speech recognition model (~40MB) downloads automatically.          │
 │  You'll see: "[*] Downloading speech model (first time only)..."       │
+│                                                                         │
+│  ⏱️  Download time: 2-15 minutes (depends on internet speed)            │
+│      - Fast internet (50+ Mbps): ~2-3 minutes                           │
+│      - Average internet (10-50 Mbps): ~5-8 minutes                      │
+│      - Slow internet (<10 Mbps): ~10-15 minutes                         │
 │                                                                         │
 │  ✓ This only happens ONCE                                               │
 │  ✓ After download, the app starts instantly                             │
@@ -184,14 +189,15 @@ python speakskiptype.py
 
 **What to expect on first run:**
 1. App starts and shows "Downloading speech model..."
-2. **Wait 2-5 minutes** (depending on internet speed)
+2. **Wait 2-15 minutes** (depending on your internet speed)
 3. You'll see "Model downloaded!" when complete
 4. The main interface appears - you're ready to go!
 
 **If it seems stuck:**
-- The download is happening in the background
+- The download IS happening in the background
 - No progress bar is shown (this is normal)
-- Just wait - it WILL complete
+- Just wait patiently - it WILL complete
+- On slow connections, it can take up to 15 minutes
 - Check `~/.speakskiptype/` folder to see if model is downloading
 
 ---
